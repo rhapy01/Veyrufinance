@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Trezu"
+description = "A global financial platform for freelancers and remote businesses to manage invoices, payroll, treasury allocations, approved local currency exchange, and financial records."
+version = "1.0.0"
+id = "artifacts/trezu"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20308
+
+[services.development]
+run = "pnpm --filter @workspace/trezu run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/trezu", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/trezu/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20308"
+BASE_PATH = "/"

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 32" role="img" aria-label="Trezu">
+  <g transform="skewX(-14)" fill="#267b5b">
+    <rect x="7" y="13" width="6" height="12" rx="2" opacity=".62"/>
+    <rect x="17" y="7" width="6" height="18" rx="2" opacity=".82"/>
+    <rect x="27" y="2" width="6" height="23" rx="2"/>
+  </g>
+  <text x="43" y="24" fill="#263044" font-family="Manrope, sans-serif" font-size="24" font-weight="800" letter-spacing="-1.8">trezu</text>
+</svg>

@@ -1,6 +1,6 @@
-# [Project name]
+# Trezu
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Trezu is a global financial workspace for freelancers and remote businesses to manage invoices, payroll setup, treasury preferences, approved local exchange vendors, and financial records.
 
 ## Run & Operate
 
@@ -14,31 +14,43 @@ _Replace the heading above with the project's name, and this line with one sente
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
+- Web: React, Vite, Wouter, TanStack Query
+- Authentication: Replit-managed Clerk
+- API: Express 5 with Clerk session authentication
 - DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Validation: Zod and generated OpenAPI schemas
+- API codegen: Orval from `lib/api-spec/openapi.yaml`
+- Build: Vite for the web app, esbuild for the API
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/trezu/` — Trezu public site and authenticated finance workspace
+- `artifacts/api-server/src/routes/trezu/` — authenticated workspace API routes
+- `lib/db/src/schema/` — workspace, invoice, employee, vendor, audit, and ledger tables
+- `lib/api-spec/openapi.yaml` — API contract source of truth
+- `artifacts/trezu/src/index.css` — shared web theme
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Browser and API authentication use Clerk session cookies. Financial API routes must enforce workspace membership and role checks on the server.
+- Money is stored as PostgreSQL numeric and accepted as decimal strings. Do not convert financial values to JavaScript floating point for calculations.
+- The ledger has an idempotency key and external provider reference. Record funds only after a provider verifies settlement.
+- Treasury allocations are preferences only until an actual movement provider is configured. Never imply that saving a percentage moves funds.
+- The exchange marketplace is limited to manually approved vendors. Fiat settlement is direct between the user and vendor, not an assumed API transfer.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+The product is organized as one workspace across invoices, payroll, treasury, vendor exchange, and financial records. The first implementation supports account setup, invoice drafts, employee compensation profiles, saved allocation preferences, and vendor applications/listings. Wallet connection, payments, payroll execution, automatic fund movement, disputes, and downloadable financial documents require additional service work and must not be represented as completed until wired to verified providers.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Do not use em dashes in Trezu copy or UI.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- After any change to `lib/api-spec/openapi.yaml`, rerun `pnpm --filter @workspace/api-spec run codegen`.
+- Use Clerk's `/sign-in/*?` and `/sign-up/*?` routes and the artifact base path in all auth URLs.
+- The web app and API share an origin, so browser API requests use Clerk cookies and must not add bearer-token handling.
 
 ## Pointers
 

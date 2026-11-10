@@ -3,13 +3,25 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Trezu financial workspace API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: workspace
+    description: Authenticated workspace and dashboard operations
+  - name: invoices
+    description: Invoice records
+  - name: payroll
+    description: Employee and payroll setup records
+  - name: treasury
+    description: Internal allocation preferences
+  - name: exchange
+    description: Approved vendor marketplace
+  - name: records
+    description: Workspace financial records
 paths:
   /healthz:
     get:
@@ -24,6 +36,250 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /profile:
+    get:
+      operationId: getProfile
+      tags: [workspace]
+      summary: Get the authenticated user's workspace profile
+      responses:
+        "200":
+          description: Current profile and workspace membership
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "401":
+          description: Authentication required
+  /workspaces:
+    post:
+      operationId: createWorkspace
+      tags: [workspace]
+      summary: Create a workspace for the authenticated user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceInput"
+      responses:
+        "201":
+          description: Workspace created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "409":
+          description: User already belongs to a workspace
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [workspace]
+      summary: Get the current workspace overview
+      responses:
+        "200":
+          description: Current workspace counts and connection state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard"
+        "401":
+          description: Authentication required
+        "403":
+          description: Workspace membership required
+  /invoices:
+    get:
+      operationId: getInvoices
+      tags: [invoices]
+      summary: List invoices for the current workspace
+      responses:
+        "200":
+          description: Invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invoice"
+        "401":
+          description: Authentication required
+        "403":
+          description: Workspace membership required
+    post:
+      operationId: createInvoice
+      tags: [invoices]
+      summary: Create a draft invoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceInput"
+      responses:
+        "201":
+          description: Draft invoice created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "400":
+          description: Invalid invoice
+        "401":
+          description: Authentication required
+        "403":
+          description: Role cannot create invoices
+  /employees:
+    get:
+      operationId: getEmployees
+      tags: [payroll]
+      summary: List employee records for the current workspace
+      responses:
+        "200":
+          description: Employee records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Employee"
+        "401":
+          description: Authentication required
+        "403":
+          description: Workspace membership required
+    post:
+      operationId: createEmployee
+      tags: [payroll]
+      summary: Add an employee payroll record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmployeeInput"
+      responses:
+        "201":
+          description: Employee record created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        "400":
+          description: Invalid employee record
+        "401":
+          description: Authentication required
+        "403":
+          description: Role cannot manage payroll
+  /treasury/allocations:
+    get:
+      operationId: getAllocations
+      tags: [treasury]
+      summary: Get workspace allocation preferences
+      responses:
+        "200":
+          description: Saved allocation preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Allocations"
+        "401":
+          description: Authentication required
+        "403":
+          description: Workspace membership required
+    put:
+      operationId: updateAllocations
+      tags: [treasury]
+      summary: Save workspace allocation preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AllocationsInput"
+      responses:
+        "200":
+          description: Updated allocation preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Allocations"
+        "400":
+          description: Allocation percentages must total 100
+        "401":
+          description: Authentication required
+        "403":
+          description: Role cannot change allocations
+  /vendors:
+    get:
+      operationId: getVendors
+      tags: [exchange]
+      summary: List approved vendors
+      parameters:
+        - name: country
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 2
+        - name: currency
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 3
+      responses:
+        "200":
+          description: Approved vendor listings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Vendor"
+        "401":
+          description: Authentication required
+  /vendor-applications:
+    post:
+      operationId: createVendorApplication
+      tags: [exchange]
+      summary: Apply to become a verified vendor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VendorApplicationInput"
+      responses:
+        "201":
+          description: Application received for review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VendorApplication"
+        "400":
+          description: Invalid vendor application
+        "401":
+          description: Authentication required
+        "409":
+          description: Application already exists
+  /records:
+    get:
+      operationId: getRecords
+      tags: [records]
+      summary: List workspace financial records
+      responses:
+        "200":
+          description: Available financial records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FinancialRecord"
+        "401":
+          description: Authentication required
+        "403":
+          description: Workspace membership required
 components:
   schemas:
     HealthStatus:
@@ -33,4 +289,290 @@ components:
           type: string
       required:
         - status
+    Profile:
+      type: object
+      properties:
+        userId:
+          type: string
+        workspaceId:
+          type: ["string", "null"]
+        workspaceName:
+          type: ["string", "null"]
+        workspaceType:
+          type: ["string", "null"]
+          enum: [freelancer, business, null]
+        role:
+          type: ["string", "null"]
+          enum: [owner, admin, employee, vendor, platform_admin, null]
+      required: [userId, workspaceId, workspaceName, workspaceType, role]
+    WorkspaceInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        type:
+          type: string
+          enum: [freelancer, business]
+      required: [name, type]
+    Dashboard:
+      type: object
+      properties:
+        workspaceName:
+          type: string
+        workspaceType:
+          type: string
+          enum: [freelancer, business]
+        role:
+          type: string
+          enum: [owner, admin, employee, vendor, platform_admin]
+        invoiceCount:
+          type: integer
+        employeeCount:
+          type: integer
+        pendingVendorApplications:
+          type: integer
+        walletStatus:
+          type: string
+          enum: [not_connected]
+        confirmedBalance:
+          type: ["string", "null"]
+      required: [workspaceName, workspaceType, role, invoiceCount, employeeCount, pendingVendorApplications, walletStatus, confirmedBalance]
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        invoiceNumber:
+          type: string
+        clientName:
+          type: string
+        clientEmail:
+          type: ["string", "null"]
+        description:
+          type: string
+        amount:
+          type: string
+          pattern: "^[0-9]+(\\.[0-9]{1,6})?$"
+        currency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+        status:
+          type: string
+          enum: [draft]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, invoiceNumber, clientName, clientEmail, description, amount, currency, status, createdAt]
+    InvoiceInput:
+      type: object
+      properties:
+        clientName:
+          type: string
+          minLength: 1
+          maxLength: 160
+        clientEmail:
+          type: ["string", "null"]
+          format: email
+        description:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        amount:
+          type: string
+          pattern: "^[0-9]+(\\.[0-9]{1,6})?$"
+        currency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+      required: [clientName, description, amount, currency]
+    Employee:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        compensationAmount:
+          type: string
+          pattern: "^[0-9]+(\\.[0-9]{1,6})?$"
+        compensationCurrency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+        payFrequency:
+          type: string
+          enum: [weekly, biweekly, monthly]
+        preferredStablecoin:
+          type: string
+          enum: [USDC, USDT]
+        preferredNetwork:
+          type: string
+        walletAddress:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, email, compensationAmount, compensationCurrency, payFrequency, preferredStablecoin, preferredNetwork, walletAddress, createdAt]
+    EmployeeInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        email:
+          type: string
+          format: email
+        compensationAmount:
+          type: string
+          pattern: "^[0-9]+(\\.[0-9]{1,6})?$"
+        compensationCurrency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+        payFrequency:
+          type: string
+          enum: [weekly, biweekly, monthly]
+        preferredStablecoin:
+          type: string
+          enum: [USDC, USDT]
+        preferredNetwork:
+          type: string
+          minLength: 1
+          maxLength: 80
+        walletAddress:
+          type: ["string", "null"]
+      required: [name, email, compensationAmount, compensationCurrency, payFrequency, preferredStablecoin, preferredNetwork]
+    Allocations:
+      type: object
+      properties:
+        taxPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        savingsPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        spendingPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        automationEnabled:
+          type: boolean
+        automationStatus:
+          type: string
+          enum: [preferences_only]
+        updatedAt:
+          type: ["string", "null"]
+          format: date-time
+      required: [taxPercent, savingsPercent, spendingPercent, automationEnabled, automationStatus, updatedAt]
+    AllocationsInput:
+      type: object
+      properties:
+        taxPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        savingsPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        spendingPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        automationEnabled:
+          type: boolean
+      required: [taxPercent, savingsPercent, spendingPercent, automationEnabled]
+    Vendor:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        businessName:
+          type: string
+        country:
+          type: string
+          pattern: "^[A-Z]{2}$"
+        currency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+        paymentMethods:
+          type: array
+          items:
+            type: string
+        indicativeRate:
+          type: ["string", "null"]
+        rating:
+          type: ["number", "null"]
+        completedTrades:
+          type: integer
+      required: [id, businessName, country, currency, paymentMethods, indicativeRate, rating, completedTrades]
+    VendorApplication:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        businessName:
+          type: string
+        country:
+          type: string
+          pattern: "^[A-Z]{2}$"
+        currency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+        paymentMethods:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [pending]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, businessName, country, currency, paymentMethods, status, createdAt]
+    VendorApplicationInput:
+      type: object
+      properties:
+        businessName:
+          type: string
+          minLength: 1
+          maxLength: 160
+        country:
+          type: string
+          pattern: "^[A-Z]{2}$"
+        currency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+        paymentMethods:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum: [MTN Mobile Money, Airtel Money, Bank transfer]
+      required: [businessName, country, currency, paymentMethods]
+    FinancialRecord:
+      type: object
+      properties:
+        id:
+          type: string
+        recordType:
+          type: string
+          enum: [invoice, payroll_profile, vendor_application]
+        title:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, recordType, title, status, createdAt]
 

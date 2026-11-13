@@ -63,6 +63,32 @@ export interface WorkspaceInput {
   type: WorkspaceInputType;
 }
 
+export type WorkspaceMembershipType = typeof WorkspaceMembershipType[keyof typeof WorkspaceMembershipType];
+
+
+export const WorkspaceMembershipType = {
+  freelancer: 'freelancer',
+  business: 'business',
+} as const;
+
+export type WorkspaceMembershipRole = typeof WorkspaceMembershipRole[keyof typeof WorkspaceMembershipRole];
+
+
+export const WorkspaceMembershipRole = {
+  owner: 'owner',
+  admin: 'admin',
+  employee: 'employee',
+  vendor: 'vendor',
+  platform_admin: 'platform_admin',
+} as const;
+
+export interface WorkspaceMembership {
+  id: string;
+  name: string;
+  type: WorkspaceMembershipType;
+  role: WorkspaceMembershipRole;
+}
+
 export type DashboardWorkspaceType = typeof DashboardWorkspaceType[keyof typeof DashboardWorkspaceType];
 
 
@@ -106,21 +132,365 @@ export type InvoiceStatus = typeof InvoiceStatus[keyof typeof InvoiceStatus];
 
 export const InvoiceStatus = {
   draft: 'draft',
+  sent: 'sent',
+  viewed: 'viewed',
+  partially_paid: 'partially_paid',
+  paid: 'paid',
+  overdue: 'overdue',
+  cancelled: 'cancelled',
 } as const;
+
+export interface InvoiceLineItem {
+  /**
+     * @minLength 1
+     * @maxLength 240
+     */
+  description: string;
+  /** @pattern ^[0-9]+(\.[0-9]{1,6})?$ */
+  amount: string;
+}
 
 export interface Invoice {
   id: string;
+  /** @nullable */
+  publicToken: string | null;
+  /** Relative public checkout path, returned when this invoice is created with settlement details */
+  paymentLink?: string;
   invoiceNumber: string;
   clientName: string;
   /** @nullable */
   clientEmail: string | null;
   description: string;
+  lineItems: InvoiceLineItem[];
   /** @pattern ^[0-9]+(\.[0-9]{1,6})?$ */
   amount: string;
   /** @pattern ^[A-Z]{3}$ */
   currency: string;
+  /** @nullable */
+  dueDate: string | null;
+  /** @nullable */
+  notes: string | null;
+  /** @nullable */
+  paymentTerms: string | null;
   status: InvoiceStatus;
   createdAt: string;
+}
+
+export interface InvoicePaymentLinkInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  paymentAssetId: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  paymentRecipient: string;
+}
+
+export type InvoicePaymentLinkStatus = typeof InvoicePaymentLinkStatus[keyof typeof InvoicePaymentLinkStatus];
+
+
+export const InvoicePaymentLinkStatus = {
+  sent: 'sent',
+  viewed: 'viewed',
+  paid: 'paid',
+} as const;
+
+export interface InvoicePaymentLink {
+  invoiceId: string;
+  status: InvoicePaymentLinkStatus;
+  paymentLink: string;
+  currency: string;
+}
+
+export type PublicInvoiceStatus = typeof PublicInvoiceStatus[keyof typeof PublicInvoiceStatus];
+
+
+export const PublicInvoiceStatus = {
+  sent: 'sent',
+  viewed: 'viewed',
+  partially_paid: 'partially_paid',
+  paid: 'paid',
+  overdue: 'overdue',
+} as const;
+
+export interface PublicInvoice {
+  invoiceNumber: string;
+  clientName: string;
+  description: string;
+  lineItems: InvoiceLineItem[];
+  /** @nullable */
+  dueDate: string | null;
+  /** @nullable */
+  notes: string | null;
+  /** @nullable */
+  paymentTerms: string | null;
+  amount: string;
+  currency: string;
+  status: PublicInvoiceStatus;
+  destinationAssetId: string;
+  destinationAssetSymbol: string;
+  paymentRecipient: string;
+}
+
+export interface NearIntentAsset {
+  assetId: string;
+  /**
+     * @minimum 0
+     * @maximum 36
+     */
+  decimals: number;
+  blockchain: string;
+  symbol: string;
+  price?: number;
+  priceUpdatedAt?: string;
+  /** @nullable */
+  contractAddress?: string | null;
+}
+
+export interface PublicInvoiceAssets {
+  assets: NearIntentAsset[];
+  destination: NearIntentAsset;
+}
+
+export interface PublicInvoiceQuoteInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  originAsset: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  refundTo: string;
+  /**
+     * @minimum 1
+     * @maximum 5000
+     */
+  slippageTolerance?: number;
+}
+
+export interface InvoiceReceiptReference {
+  paymentId: string;
+  settledAt: string;
+}
+
+export interface TreasuryAllocationPreview {
+  tax: string;
+  savings: string;
+  spending: string;
+  taxPercent: number;
+  savingsPercent: number;
+  spendingPercent: number;
+}
+
+export interface TreasuryEligiblePayment {
+  paymentId: string;
+  /** @nullable */
+  invoiceNumber: string | null;
+  amount: string;
+  currency: string;
+  settledAt: string;
+  hasSavedPreferences: boolean;
+  preview: TreasuryAllocationPreview | null;
+}
+
+export interface TreasuryAllocationConfirmation {
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  taxPercent: number;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  savingsPercent: number;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  spendingPercent: number;
+  updatedAt: string;
+}
+
+export type TreasuryAllocationHistoryItemMovementStatus = typeof TreasuryAllocationHistoryItemMovementStatus[keyof typeof TreasuryAllocationHistoryItemMovementStatus];
+
+
+export const TreasuryAllocationHistoryItemMovementStatus = {
+  internal_ledger_only: 'internal_ledger_only',
+} as const;
+
+export interface TreasuryAllocationHistoryItem {
+  id: string;
+  invoiceNumber: string;
+  sourceAmount: string;
+  currency: string;
+  taxAmount: string;
+  savingsAmount: string;
+  spendingAmount: string;
+  createdAt: string;
+  movementStatus: TreasuryAllocationHistoryItemMovementStatus;
+}
+
+export interface TreasuryAllocationResult {
+  event: TreasuryAllocationHistoryItem;
+  alreadyRecorded: boolean;
+}
+
+export type TaxReserveReportBasis = typeof TaxReserveReportBasis[keyof typeof TaxReserveReportBasis];
+
+
+export const TaxReserveReportBasis = {
+  confirmed_internal_ledger_entries: 'confirmed_internal_ledger_entries',
+} as const;
+
+export type TaxReserveReportMovementStatus = typeof TaxReserveReportMovementStatus[keyof typeof TaxReserveReportMovementStatus];
+
+
+export const TaxReserveReportMovementStatus = {
+  internal_ledger_only: 'internal_ledger_only',
+} as const;
+
+export type TaxReserveReportTotalsItem = {
+  currency: string;
+  openingBalance: string;
+  allocatedDuringPeriod: string;
+  closingBalance: string;
+};
+
+export type TaxReserveReportEntriesItem = {
+  allocationId: string;
+  paymentId: string;
+  invoiceNumber: string;
+  recordedAt: string;
+  currency: string;
+  sourceAmount: string;
+  taxPercent: number;
+  taxReserveAmount: string;
+  internalOnly: boolean;
+};
+
+export interface TaxReserveReport {
+  from: string;
+  to: string;
+  basis: TaxReserveReportBasis;
+  taxAdvice: false;
+  movementStatus: TaxReserveReportMovementStatus;
+  totals: TaxReserveReportTotalsItem[];
+  entries: TaxReserveReportEntriesItem[];
+}
+
+export interface SavingsGoalInput {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  name: string;
+  /** @pattern ^[A-Z0-9]{2,12}$ */
+  currency: string;
+  /** @pattern ^(?:0|[1-9][0-9]{0,41})(?:\.[0-9]{1,36})?$ */
+  targetAmount: string;
+  /** @nullable */
+  targetDate?: string | null;
+}
+
+export type SavingsGoalUpdateStatus = typeof SavingsGoalUpdateStatus[keyof typeof SavingsGoalUpdateStatus];
+
+
+export const SavingsGoalUpdateStatus = {
+  active: 'active',
+  paused: 'paused',
+} as const;
+
+export interface SavingsGoalUpdate {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  name?: string;
+  /** @pattern ^(?:0|[1-9][0-9]{0,41})(?:\.[0-9]{1,36})?$ */
+  targetAmount?: string;
+  /** @nullable */
+  targetDate?: string | null;
+  status?: SavingsGoalUpdateStatus;
+}
+
+export interface SavingsGoalContributionInput {
+  allocationEventId: string;
+  /** @pattern ^(?:0|[1-9][0-9]{0,41})(?:\.[0-9]{1,36})?$ */
+  amount: string;
+}
+
+export type SavingsGoalContributionResultContribution = {
+  id: string;
+  goalId: string;
+  allocationEventId: string;
+  amount: string;
+  createdAt: string;
+};
+
+export type SavingsGoalContributionResultMovementStatus = typeof SavingsGoalContributionResultMovementStatus[keyof typeof SavingsGoalContributionResultMovementStatus];
+
+
+export const SavingsGoalContributionResultMovementStatus = {
+  internal_ledger_only: 'internal_ledger_only',
+} as const;
+
+export interface SavingsGoalContributionResult {
+  contribution: SavingsGoalContributionResultContribution;
+  alreadyRecorded: boolean;
+  movementStatus: SavingsGoalContributionResultMovementStatus;
+}
+
+export interface SavingsSource {
+  allocationEventId: string;
+  invoiceNumber: string;
+  currency: string;
+  savingsAmount: string;
+  availableAmount: string;
+  createdAt: string;
+}
+
+export type SavingsGoalStatus = typeof SavingsGoalStatus[keyof typeof SavingsGoalStatus];
+
+
+export const SavingsGoalStatus = {
+  active: 'active',
+  paused: 'paused',
+  completed: 'completed',
+} as const;
+
+export type SavingsGoalContributionsItemMovementStatus = typeof SavingsGoalContributionsItemMovementStatus[keyof typeof SavingsGoalContributionsItemMovementStatus];
+
+
+export const SavingsGoalContributionsItemMovementStatus = {
+  internal_ledger_only: 'internal_ledger_only',
+} as const;
+
+export type SavingsGoalContributionsItem = {
+  id: string;
+  amount: string;
+  invoiceNumber: string;
+  createdAt: string;
+  movementStatus: SavingsGoalContributionsItemMovementStatus;
+};
+
+export interface SavingsGoal {
+  id: string;
+  name: string;
+  currency: string;
+  targetAmount: string;
+  /** @nullable */
+  targetDate: string | null;
+  status: SavingsGoalStatus;
+  contributedAmount: string;
+  remainingAmount: string;
+  progressPercent: number;
+  contributions: SavingsGoalContributionsItem[];
 }
 
 export interface InvoiceInput {
@@ -136,10 +506,37 @@ export interface InvoiceInput {
      * @maxLength 2000
      */
   description: string;
+  /**
+     * @minItems 1
+     * @maxItems 30
+     */
+  lineItems?: InvoiceLineItem[];
   /** @pattern ^[0-9]+(\.[0-9]{1,6})?$ */
   amount: string;
   /** @pattern ^[A-Z]{3}$ */
   currency: string;
+  /** @nullable */
+  dueDate?: string | null;
+  /**
+     * @maxLength 2000
+     * @nullable
+     */
+  notes?: string | null;
+  /**
+     * @maxLength 1000
+     * @nullable
+     */
+  paymentTerms?: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 300
+     */
+  paymentAssetId: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  paymentRecipient: string;
 }
 
 export type EmployeePayFrequency = typeof EmployeePayFrequency[keyof typeof EmployeePayFrequency];
@@ -161,8 +558,13 @@ export const EmployeePreferredStablecoin = {
 
 export interface Employee {
   id: string;
+  /** @nullable */
+  userId: string | null;
   name: string;
   email: string;
+  /** @pattern ^[A-Z]{2}$ */
+  country: string;
+  position: string;
   /** @pattern ^[0-9]+(\.[0-9]{1,6})?$ */
   compensationAmount: string;
   /** @pattern ^[A-Z]{3}$ */
@@ -172,46 +574,166 @@ export interface Employee {
   preferredNetwork: string;
   /** @nullable */
   walletAddress: string | null;
+  payrollEnabled: boolean;
+  payoutProfileCompleted: boolean;
+  active: boolean;
   createdAt: string;
 }
 
-export type EmployeeInputPayFrequency = typeof EmployeeInputPayFrequency[keyof typeof EmployeeInputPayFrequency];
+export type PayrollPayoutQuoteQuote = { [key: string]: unknown };
+
+export interface PayrollPayoutQuote {
+  paymentId: string;
+  providerStatus: string;
+  quote: PayrollPayoutQuoteQuote;
+  payoutAmount: string;
+  payoutCurrency: string;
+  /** @nullable */
+  payoutUsdPrice: string | null;
+}
+
+export type EmployeePayrollDetailsPayFrequency = typeof EmployeePayrollDetailsPayFrequency[keyof typeof EmployeePayrollDetailsPayFrequency];
 
 
-export const EmployeeInputPayFrequency = {
+export const EmployeePayrollDetailsPayFrequency = {
   weekly: 'weekly',
   biweekly: 'biweekly',
   monthly: 'monthly',
 } as const;
 
-export type EmployeeInputPreferredStablecoin = typeof EmployeeInputPreferredStablecoin[keyof typeof EmployeeInputPreferredStablecoin];
+export interface EmployeePayrollDetails {
+  /** @pattern ^(?:0|[1-9][0-9]{0,23})(?:\.[0-9]{1,6})?$ */
+  compensationAmount: string;
+  /** @pattern ^[A-Z]{3}$ */
+  compensationCurrency: string;
+  payFrequency: EmployeePayrollDetailsPayFrequency;
+}
 
+export type EmployeePayrollEnrollment = EmployeePayrollDetails & {
+  employeeId: string;
+};
 
-export const EmployeeInputPreferredStablecoin = {
-  USDC: 'USDC',
-  USDT: 'USDT',
-} as const;
-
-export interface EmployeeInput {
+export interface EmployeeInvitationInput {
   /**
      * @minLength 1
      * @maxLength 160
      */
   name: string;
   email: string;
-  /** @pattern ^[0-9]+(\.[0-9]{1,6})?$ */
-  compensationAmount: string;
-  /** @pattern ^[A-Z]{3}$ */
-  compensationCurrency: string;
-  payFrequency: EmployeeInputPayFrequency;
-  preferredStablecoin: EmployeeInputPreferredStablecoin;
+}
+
+export type NearIntentAssetsResponseFeeSchedule = typeof NearIntentAssetsResponseFeeSchedule[keyof typeof NearIntentAssetsResponseFeeSchedule];
+
+
+export const NearIntentAssetsResponseFeeSchedule = {
+  authenticated: 'authenticated',
+  unauthenticated: 'unauthenticated',
+} as const;
+
+export interface NearIntentAssetsResponse {
+  assets: NearIntentAsset[];
+  feeSchedule: NearIntentAssetsResponseFeeSchedule;
+}
+
+export type NearIntentQuoteInputSwapType = typeof NearIntentQuoteInputSwapType[keyof typeof NearIntentQuoteInputSwapType];
+
+
+export const NearIntentQuoteInputSwapType = {
+  EXACT_INPUT: 'EXACT_INPUT',
+  EXACT_OUTPUT: 'EXACT_OUTPUT',
+} as const;
+
+export interface NearIntentQuoteInput {
   /**
      * @minLength 1
-     * @maxLength 80
+     * @maxLength 200
      */
-  preferredNetwork: string;
+  originAsset: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  destinationAsset: string;
+  /** @pattern ^(?:0|[1-9][0-9]{0,23})(?:\.[0-9]{1,36})?$ */
+  amount: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  recipient: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  refundTo: string;
+  /**
+     * @minimum 1
+     * @maximum 5000
+     */
+  slippageTolerance?: number;
+  swapType?: NearIntentQuoteInputSwapType;
+}
+
+export type NearIntentQuoteResultQuote = { [key: string]: unknown };
+
+export interface NearIntentQuoteResult {
+  paymentId: string;
+  quote: NearIntentQuoteResultQuote;
+  providerStatus: string;
+}
+
+export type NearIntentStatusStatus = typeof NearIntentStatusStatus[keyof typeof NearIntentStatusStatus];
+
+
+export const NearIntentStatusStatus = {
+  PENDING_DEPOSIT: 'PENDING_DEPOSIT',
+  KNOWN_DEPOSIT_TX: 'KNOWN_DEPOSIT_TX',
+  PROCESSING: 'PROCESSING',
+  SUCCESS: 'SUCCESS',
+  INCOMPLETE_DEPOSIT: 'INCOMPLETE_DEPOSIT',
+  REFUNDED: 'REFUNDED',
+  FAILED: 'FAILED',
+} as const;
+
+export type NearIntentStatusProvider = { [key: string]: unknown };
+
+export type NearIntentStatusAutomaticAllocation = {
+  status: 'recorded' | 'already_recorded';
+  allocationId?: string;
+  movementStatus: 'internal_ledger_only';
+} | {
+  status: 'disabled' | 'ineligible' | 'retryable_failure';
+} | null;
+
+export interface NearIntentStatus {
+  paymentId: string;
+  status: NearIntentStatusStatus;
+  updatedAt: string;
   /** @nullable */
-  walletAddress?: string | null;
+  reconciliationStatus?: string | null;
+  provider: NearIntentStatusProvider;
+  automaticAllocation: NearIntentStatusAutomaticAllocation;
+}
+
+/**
+ * @nullable
+ */
+export type NearIntentPaymentRecordQuotePayload = { [key: string]: unknown } | null;
+
+export interface NearIntentPaymentRecord {
+  paymentId: string;
+  /** @nullable */
+  originAsset: string | null;
+  /** @nullable */
+  destinationAsset: string | null;
+  providerStatus: string;
+  /** @nullable */
+  providerReference: string | null;
+  /** @nullable */
+  quotePayload: NearIntentPaymentRecordQuotePayload;
+  createdAt: string;
+  /** @nullable */
+  statusCheckedAt: string | null;
 }
 
 export type AllocationsAutomationStatus = typeof AllocationsAutomationStatus[keyof typeof AllocationsAutomationStatus];
@@ -262,6 +784,20 @@ export interface AllocationsInput {
   automationEnabled: boolean;
 }
 
+export type InternalIncomeAutomationSettingMovementStatus = typeof InternalIncomeAutomationSettingMovementStatus[keyof typeof InternalIncomeAutomationSettingMovementStatus];
+
+
+export const InternalIncomeAutomationSettingMovementStatus = {
+  internal_ledger_only: 'internal_ledger_only',
+} as const;
+
+export interface InternalIncomeAutomationSetting {
+  enabled: boolean;
+  /** @nullable */
+  updatedAt: string | null;
+  movementStatus: InternalIncomeAutomationSettingMovementStatus;
+}
+
 export interface Vendor {
   id: string;
   businessName: string;
@@ -277,11 +813,77 @@ export interface Vendor {
   completedTrades: number;
 }
 
+export type VendorOfferStatus = typeof VendorOfferStatus[keyof typeof VendorOfferStatus];
+
+
+export const VendorOfferStatus = {
+  active: 'active',
+  paused: 'paused',
+} as const;
+
+export interface VendorOffer {
+  id: string;
+  vendorId: string;
+  assetId: string;
+  assetSymbol: string;
+  assetNetwork: string;
+  currency: string;
+  paymentMethods: string[];
+  exchangeRate: string;
+  availableLiquidity: string;
+  minimumAmount: string;
+  maximumAmount: string;
+  status: VendorOfferStatus;
+}
+
+export type VendorOfferInputStatus = typeof VendorOfferInputStatus[keyof typeof VendorOfferInputStatus];
+
+
+export const VendorOfferInputStatus = {
+  active: 'active',
+  paused: 'paused',
+} as const;
+
+export interface VendorOfferInput {
+  /**
+     * @minLength 3
+     * @maxLength 200
+     */
+  assetId: string;
+  /** @pattern ^(?:0|[1-9][0-9]{0,17})(?:\.[0-9]{1,18})?$ */
+  exchangeRate: string;
+  /** @pattern ^(?:0|[1-9][0-9]{0,17})(?:\.[0-9]{1,18})?$ */
+  availableLiquidity: string;
+  /** @pattern ^(?:0|[1-9][0-9]{0,17})(?:\.[0-9]{1,18})?$ */
+  minimumAmount: string;
+  /** @pattern ^(?:0|[1-9][0-9]{0,17})(?:\.[0-9]{1,18})?$ */
+  maximumAmount: string;
+  /** @minItems 1 */
+  paymentMethods: string[];
+  status: VendorOfferInputStatus;
+}
+
+export interface VendorOfferAssetResponse {
+  assets: NearIntentAsset[];
+}
+
+export type VendorMarketOffer = VendorOffer & ({
+  vendorName?: string;
+  country?: string;
+  /** @nullable */
+  vendorRating?: number | null;
+  completedTrades?: number;
+  listingOnly?: boolean;
+  settlementAvailable?: boolean;
+});
+
 export type VendorApplicationStatus = typeof VendorApplicationStatus[keyof typeof VendorApplicationStatus];
 
 
 export const VendorApplicationStatus = {
   pending: 'pending',
+  approved: 'approved',
+  declined: 'declined',
 } as const;
 
 export interface VendorApplication {
@@ -293,6 +895,10 @@ export interface VendorApplication {
   currency: string;
   paymentMethods: string[];
   status: VendorApplicationStatus;
+  /** @nullable */
+  reviewNote?: string | null;
+  /** @nullable */
+  reviewedAt?: string | null;
   createdAt: string;
 }
 
@@ -325,8 +931,19 @@ export type FinancialRecordRecordType = typeof FinancialRecordRecordType[keyof t
 export const FinancialRecordRecordType = {
   invoice: 'invoice',
   payroll_profile: 'payroll_profile',
+  payroll_cycle: 'payroll_cycle',
+  payroll_payment: 'payroll_payment',
   vendor_application: 'vendor_application',
+  near_intent_payment: 'near_intent_payment',
+  treasury_allocation: 'treasury_allocation',
+  savings_goal_contribution: 'savings_goal_contribution',
 } as const;
+
+export type FinancialRecordTransactionLinksItem = {
+  label: string;
+  hash: string;
+  url: string;
+};
 
 export interface FinancialRecord {
   id: string;
@@ -334,7 +951,65 @@ export interface FinancialRecord {
   title: string;
   status: string;
   createdAt: string;
+  /** Context and asset amounts for payment quote records. */
+  detail?: string;
+  /** Related NEAR Intents quote identifier. */
+  quoteId?: string;
+  /** Provider deposit address for this specific quote. */
+  depositAddress?: string;
+  /** Source and destination chain transaction hashes with explorer links. */
+  transactionLinks?: FinancialRecordTransactionLinksItem[];
 }
+
+export type ListWorkspaces200 = {
+  workspaces: WorkspaceMembership[];
+};
+
+export type PreparePayrollCycleBodyFrequency = typeof PreparePayrollCycleBodyFrequency[keyof typeof PreparePayrollCycleBodyFrequency];
+
+
+export const PreparePayrollCycleBodyFrequency = {
+  weekly: 'weekly',
+  biweekly: 'biweekly',
+  monthly: 'monthly',
+} as const;
+
+export type PreparePayrollCycleBody = {
+  frequency: PreparePayrollCycleBodyFrequency;
+  periodStart: string;
+  periodEnd: string;
+  paymentDate: string;
+  /**
+     * @minLength 8
+     * @maxLength 160
+     */
+  idempotencyKey: string;
+};
+
+export type PreparePayrollItemPayoutBody = {
+  originAsset: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  refundTo: string;
+};
+
+export type GetNearIntentStatusParams = {
+paymentId: string;
+};
+
+export type UpdateInternalIncomeAutomationBody = {
+  enabled: boolean;
+  /** @nullable */
+  expectedUpdatedAt: string | null;
+  expectedPreferencesUpdatedAt: string;
+};
+
+export type GetTaxReserveReportParams = {
+from: string;
+to: string;
+};
 
 export type GetVendorsParams = {
 /**
@@ -347,5 +1022,24 @@ country?: string;
  * @maxLength 3
  */
 currency?: string;
+};
+
+export type ListActiveVendorOffersParams = {
+/**
+ * @pattern ^[A-Z]{2}$
+ */
+country?: string;
+/**
+ * @pattern ^[A-Z]{3}$
+ */
+currency?: string;
+};
+
+export type DeclineVendorApplicationBody = {
+  /**
+     * @minLength 1
+     * @maxLength 1000
+     */
+  reason: string;
 };
 

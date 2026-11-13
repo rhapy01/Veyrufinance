@@ -7,6 +7,7 @@ export type ErrorType<T = unknown> = ApiError<T>;
 export type BodyType<T> = T;
 
 export type AuthTokenGetter = () => Promise<string | null> | string | null;
+export type WorkspaceIdGetter = () => Promise<string | null> | string | null;
 
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
@@ -17,6 +18,7 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _workspaceIdGetter: WorkspaceIdGetter | null = null;
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -42,6 +44,10 @@ export function setBaseUrl(url: string | null): void {
  */
 export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
+}
+
+export function setWorkspaceIdGetter(getter: WorkspaceIdGetter | null): void {
+  _workspaceIdGetter = getter;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -347,6 +353,11 @@ export async function customFetch<T = unknown>(
 
   if (responseType === "json" && !headers.has("accept")) {
     headers.set("accept", DEFAULT_JSON_ACCEPT);
+  }
+
+  if (_workspaceIdGetter && !headers.has("x-trezu-workspace-id")) {
+    const workspaceId = await _workspaceIdGetter();
+    if (workspaceId) headers.set("x-trezu-workspace-id", workspaceId);
   }
 
   // Attach bearer token when an auth getter is configured and no

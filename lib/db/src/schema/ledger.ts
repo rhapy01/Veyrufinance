@@ -15,7 +15,7 @@ import { workspacesTable } from "./workspaces";
 
 export const ledgerTransactionTypeEnum = pgEnum(
   "trezu_ledger_transaction_type",
-  ["payment_in", "payment_out", "exchange"],
+  ["payment_in", "payment_out", "exchange", "treasury_allocation"],
 );
 
 export const ledgerTransactionStatusEnum = pgEnum(
@@ -73,7 +73,7 @@ export const ledgerEntriesTable = pgTable(
       .references(() => workspacesTable.id, { onDelete: "restrict" }),
     accountCode: text("account_code").notNull(),
     side: ledgerEntrySideEnum("side").notNull(),
-    amount: numeric("amount", { precision: 24, scale: 6 }).notNull(),
+    amount: numeric("amount", { precision: 78, scale: 36 }).notNull(),
     currency: text("currency").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

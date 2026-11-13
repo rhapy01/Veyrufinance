@@ -20,8 +20,12 @@ tags:
     description: Internal allocation preferences
   - name: exchange
     description: Approved vendor marketplace
+  - name: administration
+    description: Platform-wide administrative review and controls
   - name: records
     description: Workspace financial records
+  - name: near-intents
+    description: NEAR Intents supported asset discovery, quotes, and settlement status
 paths:
   /healthz:
     get:
@@ -51,6 +55,23 @@ paths:
         "401":
           description: Authentication required
   /workspaces:
+    get:
+      operationId: listWorkspaces
+      tags: [workspace]
+      summary: List all workspaces available to the authenticated user
+      responses:
+        "200":
+          description: Accessible workspace memberships
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workspaces:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WorkspaceMembership"
+                required: [workspaces]
     post:
       operationId: createWorkspace
       tags: [workspace]
@@ -107,7 +128,7 @@ paths:
     post:
       operationId: createInvoice
       tags: [invoices]
-      summary: Create a draft invoice
+      summary: Create an invoice and its payment link
       requestBody:
         required: true
         content:
@@ -116,7 +137,7 @@ paths:
               $ref: "#/components/schemas/InvoiceInput"
       responses:
         "201":
-          description: Draft invoice created
+          description: Invoice and shareable payment link created together when settlement details are supplied
           content:
             application/json:
               schema:
@@ -127,6 +148,258 @@ paths:
           description: Authentication required
         "403":
           description: Role cannot create invoices
+  /invoices/{invoiceId}/payment-link:
+    post:
+      operationId: createInvoicePaymentLink
+      tags: [invoices]
+      summary: Publish a draft invoice as a token-denominated payment link
+      parameters:
+        - name: invoiceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoicePaymentLinkInput"
+      responses:
+        "200":
+          description: Existing payment link returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoicePaymentLink"
+        "201":
+          description: Invoice published with a public payment link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoicePaymentLink"
+        "400":
+          description: Invalid asset, recipient, or currency denomination
+        "401":
+          description: Authentication required
+        "403":
+          description: Role cannot publish invoices
+        "404":
+          description: Invoice not found
+        "409":
+          description: Invoice cannot be changed or has already been published with different payment settings
+  /invoices/{invoiceId}/pdf:
+    get:
+      operationId: downloadInvoicePdf
+      tags: [invoices]
+      summary: Download a saved invoice as a PDF
+      parameters:
+        - name: invoiceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Invoice PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Authentication required
+        "403":
+          description: Owner or admin role required
+        "404":
+          description: Invoice not found
+  /public/invoices/{token}:
+    get:
+      operationId: getPublicInvoice
+      tags: [invoices]
+      summary: View a published invoice by its share token
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 32
+            maxLength: 64
+      responses:
+        "200":
+          description: Public invoice details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicInvoice"
+        "404":
+          description: Payment link not found or no longer available
+  /public/invoices/{token}/pdf:
+    get:
+      operationId: downloadPublicInvoicePdf
+      tags: [invoices]
+      summary: Download an invoice PDF from its payment link
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 32
+            maxLength: 64
+      responses:
+        "200":
+          description: Invoice PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Payment link not found
+  /public/invoices/{token}/assets:
+    get:
+      operationId: getPublicInvoicePaymentAssets
+      tags: [invoices]
+      summary: List supported source assets for a published invoice payment
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Supported source assets and the destination asset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicInvoiceAssets"
+        "404":
+          description: Payment link not found
+        "503":
+          description: NEAR Intents is unavailable
+  /public/invoices/{token}/quotes:
+    post:
+      operationId: createPublicInvoicePaymentQuote
+      tags: [invoices]
+      summary: Create an exact-output NEAR Intents quote for an invoice
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublicInvoiceQuoteInput"
+      responses:
+        "201":
+          description: Signed provider quote and saved payment record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NearIntentQuoteResult"
+        "400":
+          description: Invalid or unsupported source asset or refund address
+        "404":
+          description: Payment link not found
+        "409":
+          description: Invoice is already paid or not available for payment
+        "503":
+          description: NEAR Intents is unavailable
+  /public/invoices/{token}/payments/{paymentId}/status:
+    get:
+      operationId: getPublicInvoicePaymentStatus
+      tags: [invoices]
+      summary: Refresh provider settlement status for an invoice payment
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Current provider status and invoice reconciliation state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NearIntentStatus"
+        "404":
+          description: Payment link or quote not found
+        "503":
+          description: NEAR Intents is unavailable
+  /public/invoices/{token}/receipts:
+    get:
+      operationId: getPublicInvoiceReceipts
+      tags: [invoices]
+      summary: List provider-confirmed receipts for a published invoice
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Reconciled invoice receipts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InvoiceReceiptReference"
+        "404":
+          description: Payment link not found
+  /public/invoices/{token}/payments/{paymentId}/receipt:
+    get:
+      operationId: downloadPublicInvoiceReceipt
+      tags: [invoices]
+      summary: Download the PDF receipt for a provider-confirmed invoice payment
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Payment receipt PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Receipt not found
+        "409":
+          description: Settlement is not confirmed and reconciled
   /employees:
     get:
       operationId: getEmployees
@@ -146,28 +419,410 @@ paths:
         "403":
           description: Workspace membership required
     post:
-      operationId: createEmployee
+      operationId: enrollEmployeeInPayroll
       tags: [payroll]
-      summary: Add an employee payroll record
+      summary: Add an invited team member to payroll
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/EmployeeInput"
+              $ref: "#/components/schemas/EmployeePayrollEnrollment"
       responses:
-        "201":
-          description: Employee record created
+        "200":
+          description: Team member added to payroll
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Employee"
         "400":
           description: Invalid employee record
+        "409":
+          description: Employee has not completed the payout profile
         "401":
           description: Authentication required
         "403":
           description: Role cannot manage payroll
+  /employees/{employeeId}:
+    patch:
+      operationId: updateEmployee
+      tags: [payroll]
+      summary: Update payroll compensation for an enrolled team member
+      parameters:
+        - in: path
+          name: employeeId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmployeePayrollDetails"
+      responses:
+        "200":
+          description: Updated employee profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        "400":
+          description: Invalid employee profile
+        "404":
+          description: Employee not found in the current workspace
+        "409":
+          description: Compensation details are invalid
+        "403":
+          description: Role cannot manage payroll
+    delete:
+      operationId: removeEmployee
+      tags: [payroll]
+      summary: Archive an employee from future payroll cycles while retaining payroll history
+      parameters:
+        - in: path
+          name: employeeId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Employee profile archived; saved payroll history is retained
+        "404":
+          description: Employee not found in the current workspace
+        "403":
+          description: Role cannot manage payroll
+  /employees/invitations:
+    post:
+      operationId: inviteEmployee
+      tags: [payroll]
+      summary: Invite a team member to join Trezu
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmployeeInvitationInput"
+      responses:
+        "201":
+          description: Invitation emailed to the team member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        "400":
+          description: Invalid email or team member name
+        "409":
+          description: This email already has an active team record
+        "503":
+          description: Google SMTP is not configured or the invitation could not be sent
+  /payroll/cycles:
+    get:
+      operationId: getPayrollCycles
+      tags: [payroll]
+      summary: List payroll cycles with independently tracked employee payments
+      responses:
+        "200":
+          description: Payroll cycles and payment items
+        "401":
+          description: Authentication required
+        "403":
+          description: Role cannot manage payroll
+  /payroll/cycles/prepare:
+    post:
+      operationId: preparePayrollCycle
+      tags: [payroll]
+      summary: Snapshot matching employee compensation for review
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [frequency, periodStart, periodEnd, paymentDate, idempotencyKey]
+              properties:
+                frequency:
+                  type: string
+                  enum: [weekly, biweekly, monthly]
+                periodStart:
+                  type: string
+                  format: date
+                periodEnd:
+                  type: string
+                  format: date
+                paymentDate:
+                  type: string
+                  format: date
+                idempotencyKey:
+                  type: string
+                  minLength: 8
+                  maxLength: 160
+      responses:
+        "201":
+          description: Payroll review prepared; no payments were initiated
+        "400":
+          description: Invalid payroll cycle data
+        "409":
+          description: No matching employees or wallet preferences are incomplete
+  /payroll/cycles/{cycleId}/approve:
+    post:
+      operationId: approvePayrollCycle
+      tags: [payroll]
+      summary: Approve a draft payroll cycle and queue independent payment items
+      parameters:
+        - name: cycleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Approved; employee payments await a supported payment integration
+        "404":
+          description: Payroll cycle not found
+        "409":
+          description: Only draft cycles may be approved
+  /payroll/cycles/{cycleId}/refresh:
+    post:
+      operationId: refreshDraftPayrollCycle
+      tags: [payroll]
+      summary: Refresh an unapproved draft from current eligible team payroll settings
+      parameters:
+        - name: cycleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Draft amounts and payout destinations refreshed; no funds moved
+        "404":
+          description: Payroll cycle not found
+        "409":
+          description: Only a queued draft without payment activity can be refreshed
+  /payroll/cycles/{cycleId}:
+    delete:
+      operationId: discardDraftPayrollCycle
+      tags: [payroll]
+      summary: Discard an unapproved payroll draft with no payment activity
+      parameters:
+        - name: cycleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Draft and its queued payment items discarded
+        "404":
+          description: Payroll cycle not found
+        "409":
+          description: Only a draft without payment activity can be discarded
+  /payroll/items/{itemId}/quote:
+    post:
+      operationId: preparePayrollItemPayout
+      tags: [payroll]
+      summary: Create a signed exact output quote for one approved employee payment
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [originAsset, refundTo]
+              properties:
+                originAsset:
+                  type: string
+                refundTo:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+      responses:
+        "201":
+          description: Signed quote and deposit instructions for one employee payout
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayrollPayoutQuote"
+        "400":
+          description: Invalid quote request
+        "401":
+          description: Authentication required
+        "403":
+          description: Owner or admin role required
+        "404":
+          description: Payroll item not found
+        "409":
+          description: Cycle is not approved, payment is already active, or no current asset price is available
+        "503":
+          description: NEAR Intents asset catalog is unavailable
+  /payroll/items/{itemId}/status:
+    post:
+      operationId: checkPayrollItemPayoutStatus
+      tags: [payroll]
+      summary: Refresh provider settlement status for one employee payout
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Provider status and payroll reconciliation result
+        "401":
+          description: Authentication required
+        "403":
+          description: Owner or admin role required
+        "404":
+          description: Payroll item or quote not found
+        "409":
+          description: No payout quote exists
+        "503":
+          description: Provider status is temporarily unavailable
+  /payroll/items/{itemId}/payslip:
+    get:
+      operationId: downloadEmployeePayslip
+      tags: [payroll]
+      summary: Download a payslip after a matched provider-confirmed payment
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Confirmed employee payslip PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Authentication required
+        "403":
+          description: Owner or admin role required
+        "404":
+          description: Payment is not confirmed or payslip not found
+  /integrations/near-intents/assets:
+    get:
+      operationId: getNearIntentAssets
+      tags: [near-intents]
+      summary: List currently supported NEAR Intents assets
+      responses:
+        "200":
+          description: Provider asset catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NearIntentAssetsResponse"
+        "401":
+          description: Authentication required
+        "403":
+          description: Workspace membership required
+        "503":
+          description: NEAR Intents is unavailable
+  /integrations/near-intents/quotes:
+    post:
+      operationId: createNearIntentQuote
+      tags: [near-intents]
+      summary: Request a quote for a supported cross-chain payment
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NearIntentQuoteInput"
+      responses:
+        "201":
+          description: Provider quote, including deposit instructions and estimates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NearIntentQuoteResult"
+        "400":
+          description: Invalid quote request or unsupported asset
+        "401":
+          description: Authentication required
+        "403":
+          description: Workspace membership required
+        "503":
+          description: NEAR Intents is unavailable
+  /integrations/near-intents/status:
+    get:
+      operationId: getNearIntentStatus
+      tags: [near-intents]
+      summary: Retrieve provider settlement status for a quote deposit address
+      parameters:
+        - name: paymentId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Current provider swap status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NearIntentStatus"
+        "400":
+          description: A deposit address is required
+        "401":
+          description: Authentication required
+        "403":
+          description: Workspace membership required
+        "503":
+          description: NEAR Intents is unavailable
+  /integrations/near-intents/payments:
+    get:
+      operationId: getNearIntentPayments
+      tags: [near-intents]
+      summary: List recent NEAR Intents payment quotes for the current workspace
+      responses:
+        "200":
+          description: Saved quote and latest provider state records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NearIntentPaymentRecord"
+        "401":
+          description: Authentication required
+        "403":
+          description: Workspace membership required
   /treasury/allocations:
     get:
       operationId: getAllocations
@@ -207,6 +862,291 @@ paths:
           description: Authentication required
         "403":
           description: Role cannot change allocations
+  /treasury/allocations/eligible-payments:
+    get:
+      operationId: getTreasuryAllocationEligiblePayments
+      tags: [treasury]
+      summary: List reconciled invoice payments available for internal allocation
+      responses:
+        "200":
+          description: Provider-confirmed payments that have not been allocated in the ledger
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TreasuryEligiblePayment"
+        "401":
+          description: Authentication required
+        "403":
+          description: Owner or admin role required
+  /treasury/automation/internal-income-allocation:
+    get:
+      operationId: getInternalIncomeAutomation
+      tags: [treasury]
+      summary: Read whether confirmed income is automatically split in the internal ledger
+      responses:
+        "200":
+          description: Current opt-in setting, never a physical movement setting
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalIncomeAutomationSetting"
+        "401":
+          description: Authentication required
+        "403":
+          description: Owner or admin role required
+    put:
+      operationId: updateInternalIncomeAutomation
+      tags: [treasury]
+      summary: Enable or pause automatic internal allocation of matched invoice payments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled, expectedUpdatedAt, expectedPreferencesUpdatedAt]
+              properties:
+                enabled:
+                  type: boolean
+                expectedUpdatedAt:
+                  type: ["string", "null"]
+                  format: date-time
+                expectedPreferencesUpdatedAt:
+                  type: string
+                  format: date-time
+      responses:
+        "200":
+          description: Updated internal ledger automation setting
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalIncomeAutomationSetting"
+        "400":
+          description: Invalid setting confirmation
+        "409":
+          description: Allocation preferences are missing, changed, or invalid
+  /treasury/allocations/apply/{paymentId}:
+    post:
+      operationId: applyTreasuryAllocation
+      tags: [treasury]
+      summary: Record an internal allocation against a confirmed invoice payment
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TreasuryAllocationConfirmation"
+      responses:
+        "201":
+          description: Internal allocation and balanced ledger transaction created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TreasuryAllocationResult"
+        "200":
+          description: Existing idempotent allocation returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TreasuryAllocationResult"
+        "401":
+          description: Authentication required
+        "403":
+          description: Owner or admin role required
+        "409":
+          description: Payment is not eligible or allocation preferences are missing
+        "400":
+          description: Saved allocation preview confirmation is invalid
+  /treasury/allocations/history:
+    get:
+      operationId: getTreasuryAllocationHistory
+      tags: [treasury]
+      summary: List internal allocation history for the workspace
+      responses:
+        "200":
+          description: Internal allocation events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TreasuryAllocationHistoryItem"
+        "401":
+          description: Authentication required
+        "403":
+          description: Owner or admin role required
+  /treasury/reports/tax-reserves:
+    get:
+      operationId: getTaxReserveReport
+      tags: [treasury]
+      summary: Summarize confirmed tax reserve ledger balances for an inclusive date range
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Opening and closing reserve balances with period allocations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxReserveReport"
+        "400":
+          description: Invalid dates or range exceeds 366 days
+        "401":
+          description: Authentication required
+        "403":
+          description: Owner or admin role required
+  /treasury/savings-goals:
+    get:
+      operationId: getTreasurySavingsGoals
+      tags: [treasury]
+      summary: List savings goals and internal contribution history
+      responses:
+        "200":
+          description: Workspace savings goals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SavingsGoal"
+        "401":
+          description: Authentication required
+        "403":
+          description: Owner or admin role required
+    post:
+      operationId: createTreasurySavingsGoal
+      tags: [treasury]
+      summary: Create a savings goal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavingsGoalInput"
+      responses:
+        "201":
+          description: Savings goal created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavingsGoal"
+        "400":
+          description: Invalid name, currency, amount, or target date
+  /treasury/savings-goals/{goalId}:
+    patch:
+      operationId: updateTreasurySavingsGoal
+      tags: [treasury]
+      summary: Update savings goal details or pause state
+      parameters:
+        - name: goalId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavingsGoalUpdate"
+      responses:
+        "200":
+          description: Savings goal updated
+        "404":
+          description: Savings goal not found
+        "400":
+          description: Invalid savings goal update
+        "401":
+          description: Authentication required
+        "403":
+          description: Owner or admin role required
+  /treasury/savings-sources:
+    get:
+      operationId: getTreasurySavingsSources
+      tags: [treasury]
+      summary: List unassigned savings from recorded internal income allocations
+      responses:
+        "200":
+          description: Available internal savings amounts by confirmed income source
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SavingsSource"
+        "401":
+          description: Authentication required
+        "403":
+          description: Owner or admin role required
+  /treasury/savings-goals/{goalId}/contributions:
+    post:
+      operationId: contributeToTreasurySavingsGoal
+      tags: [treasury]
+      summary: Reclassify an internal savings allocation toward a goal
+      parameters:
+        - name: goalId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavingsGoalContributionInput"
+      responses:
+        "201":
+          description: Internal contribution recorded in the ledger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavingsGoalContributionResult"
+        "200":
+          description: Idempotent contribution result returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavingsGoalContributionResult"
+        "400":
+          description: Invalid amount, source, or idempotency key
+        "409":
+          description: Goal, currency, source amount, or target limit does not match
+        "401":
+          description: Authentication required
+        "403":
+          description: Owner or admin role required
+        "503":
+          description: Ledger storage is unavailable
   /vendors:
     get:
       operationId: getVendors
@@ -238,6 +1178,137 @@ paths:
                   $ref: "#/components/schemas/Vendor"
         "401":
           description: Authentication required
+  /offers:
+    get:
+      operationId: listActiveVendorOffers
+      tags: [exchange]
+      summary: List active offers for currently supported NEAR Intents assets
+      parameters:
+        - name: country
+          in: query
+          schema:
+            type: string
+            pattern: "^[A-Z]{2}$"
+        - name: currency
+          in: query
+          schema:
+            type: string
+            pattern: "^[A-Z]{3}$"
+      responses:
+        "200":
+          description: Vendor supplied indicative rates, liquidity, and limits
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VendorMarketOffer"
+        "401":
+          description: Authentication required
+        "503":
+          description: Provider asset catalog unavailable
+  /vendor/offers:
+    get:
+      operationId: listMyVendorOffers
+      tags: [exchange]
+      summary: List offers owned by the current approved vendor
+      responses:
+        "200":
+          description: Active and paused offers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VendorOffer"
+        "403":
+          description: Approved vendor account required
+    post:
+      operationId: createVendorOffer
+      tags: [exchange]
+      summary: Publish an offer for a currently supported asset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VendorOfferInput"
+      responses:
+        "201":
+          description: Vendor supplied offer published
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VendorOffer"
+        "400":
+          description: Invalid values or asset is not currently supported
+        "403":
+          description: Approved vendor account required
+        "503":
+          description: Provider asset catalog unavailable
+  /vendor/supported-assets:
+    get:
+      operationId: getVendorOfferAssets
+      tags: [exchange]
+      summary: Get currently supported provider assets for offer creation
+      responses:
+        "200":
+          description: Live supported asset catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VendorOfferAssetResponse"
+        "403":
+          description: Approved vendor account required
+        "503":
+          description: Provider asset catalog unavailable
+  /vendor/offers/{offerId}:
+    put:
+      operationId: updateVendorOffer
+      tags: [exchange]
+      summary: Update vendor supplied offer terms or pause status
+      parameters:
+        - name: offerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VendorOfferInput"
+      responses:
+        "200":
+          description: Updated offer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VendorOffer"
+        "400":
+          description: Invalid offer
+        "403":
+          description: Offer is not owned by the current vendor
+        "404":
+          description: Offer not found
+  /vendor-applications/mine:
+    get:
+      operationId: getMyVendorApplication
+      tags: [exchange]
+      summary: Get the current account's vendor application and review outcome
+      responses:
+        "200":
+          description: Existing application or null when no application has been submitted
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/VendorApplication"
+                  - type: "null"
+        "401":
+          description: Authentication required
   /vendor-applications:
     post:
       operationId: createVendorApplication
@@ -256,12 +1327,82 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/VendorApplication"
+        "200":
+          description: Declined application resubmitted for review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VendorApplication"
         "400":
           description: Invalid vendor application
         "401":
           description: Authentication required
         "409":
           description: Application already exists
+  /admin/vendor-applications:
+    get:
+      operationId: listVendorApplicationsForReview
+      tags: [administration]
+      summary: List vendor applications for platform review
+      responses:
+        "200":
+          description: Vendor applications ordered by submission time
+        "401":
+          description: Authentication required
+        "403":
+          description: Platform administrator role required
+  /admin/vendor-applications/{applicationId}/approve:
+    post:
+      operationId: approveVendorApplication
+      tags: [administration]
+      summary: Approve an application and publish its vendor listing atomically
+      parameters:
+        - name: applicationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Application decision and published listing
+        "404":
+          description: Application not found
+        "409":
+          description: Application is not pending
+  /admin/vendor-applications/{applicationId}/decline:
+    post:
+      operationId: declineVendorApplication
+      tags: [administration]
+      summary: Decline a vendor application and record a review reason
+      parameters:
+        - name: applicationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 1000
+      responses:
+        "200":
+          description: Application declined and review audited
+        "400":
+          description: Review reason is required
+        "404":
+          description: Application not found
+        "409":
+          description: Application is not pending
   /records:
     get:
       operationId: getRecords
@@ -316,6 +1457,21 @@ components:
           type: string
           enum: [freelancer, business]
       required: [name, type]
+    WorkspaceMembership:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum: [freelancer, business]
+        role:
+          type: string
+          enum: [owner, admin, employee, vendor, platform_admin]
+      required: [id, name, type, role]
     Dashboard:
       type: object
       properties:
@@ -345,6 +1501,11 @@ components:
         id:
           type: string
           format: uuid
+        publicToken:
+          type: ["string", "null"]
+        paymentLink:
+          type: string
+          description: Relative public checkout path, returned when this invoice is created with settlement details
         invoiceNumber:
           type: string
         clientName:
@@ -353,19 +1514,420 @@ components:
           type: ["string", "null"]
         description:
           type: string
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceLineItem"
         amount:
           type: string
           pattern: "^[0-9]+(\\.[0-9]{1,6})?$"
         currency:
           type: string
           pattern: "^[A-Z]{3}$"
+        dueDate:
+          type: ["string", "null"]
+          format: date
+        notes:
+          type: ["string", "null"]
+        paymentTerms:
+          type: ["string", "null"]
         status:
           type: string
-          enum: [draft]
+          enum: [draft, sent, viewed, partially_paid, paid, overdue, cancelled]
         createdAt:
           type: string
           format: date-time
-      required: [id, invoiceNumber, clientName, clientEmail, description, amount, currency, status, createdAt]
+      required: [id, publicToken, invoiceNumber, clientName, clientEmail, description, lineItems, amount, currency, dueDate, notes, paymentTerms, status, createdAt]
+    InvoiceLineItem:
+      type: object
+      properties:
+        description:
+          type: string
+          minLength: 1
+          maxLength: 240
+        amount:
+          type: string
+          pattern: "^[0-9]+(\\.[0-9]{1,6})?$"
+      required: [description, amount]
+    InvoicePaymentLinkInput:
+      type: object
+      properties:
+        paymentAssetId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        paymentRecipient:
+          type: string
+          minLength: 1
+          maxLength: 200
+      required: [paymentAssetId, paymentRecipient]
+    InvoicePaymentLink:
+      type: object
+      properties:
+        invoiceId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [sent, viewed, paid]
+        paymentLink:
+          type: string
+        currency:
+          type: string
+      required: [invoiceId, status, paymentLink, currency]
+    PublicInvoice:
+      type: object
+      properties:
+        invoiceNumber:
+          type: string
+        clientName:
+          type: string
+        description:
+          type: string
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceLineItem"
+        dueDate:
+          type: ["string", "null"]
+          format: date
+        notes:
+          type: ["string", "null"]
+        paymentTerms:
+          type: ["string", "null"]
+        amount:
+          type: string
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [sent, viewed, partially_paid, paid, overdue]
+        destinationAssetId:
+          type: string
+        destinationAssetSymbol:
+          type: string
+        paymentRecipient:
+          type: string
+      required: [invoiceNumber, clientName, description, lineItems, dueDate, notes, paymentTerms, amount, currency, status, destinationAssetId, destinationAssetSymbol, paymentRecipient]
+    PublicInvoiceAssets:
+      type: object
+      properties:
+        assets:
+          type: array
+          items:
+            $ref: "#/components/schemas/NearIntentAsset"
+        destination:
+          $ref: "#/components/schemas/NearIntentAsset"
+      required: [assets, destination]
+    PublicInvoiceQuoteInput:
+      type: object
+      properties:
+        originAsset:
+          type: string
+          minLength: 1
+          maxLength: 200
+        refundTo:
+          type: string
+          minLength: 1
+          maxLength: 200
+        slippageTolerance:
+          type: integer
+          minimum: 1
+          maximum: 5000
+          default: 100
+      required: [originAsset, refundTo]
+    InvoiceReceiptReference:
+      type: object
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+        settledAt:
+          type: string
+          format: date-time
+      required: [paymentId, settledAt]
+    TreasuryEligiblePayment:
+      type: object
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+        invoiceNumber:
+          type: ["string", "null"]
+        amount:
+          type: string
+        currency:
+          type: string
+        settledAt:
+          type: string
+          format: date-time
+        hasSavedPreferences:
+          type: boolean
+        preview:
+          oneOf:
+            - $ref: "#/components/schemas/TreasuryAllocationPreview"
+            - type: "null"
+      required: [paymentId, invoiceNumber, amount, currency, settledAt, hasSavedPreferences, preview]
+    TreasuryAllocationPreview:
+      type: object
+      properties:
+        tax:
+          type: string
+        savings:
+          type: string
+        spending:
+          type: string
+        taxPercent:
+          type: integer
+        savingsPercent:
+          type: integer
+        spendingPercent:
+          type: integer
+      required: [tax, savings, spending, taxPercent, savingsPercent, spendingPercent]
+    TreasuryAllocationConfirmation:
+      type: object
+      properties:
+        taxPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        savingsPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        spendingPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        updatedAt:
+          type: string
+          format: date-time
+      required: [taxPercent, savingsPercent, spendingPercent, updatedAt]
+    TreasuryAllocationResult:
+      type: object
+      properties:
+        event:
+          $ref: "#/components/schemas/TreasuryAllocationHistoryItem"
+        alreadyRecorded:
+          type: boolean
+      required: [event, alreadyRecorded]
+    TreasuryAllocationHistoryItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        invoiceNumber:
+          type: string
+        sourceAmount:
+          type: string
+        currency:
+          type: string
+        taxAmount:
+          type: string
+        savingsAmount:
+          type: string
+        spendingAmount:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        movementStatus:
+          type: string
+          enum: [internal_ledger_only]
+      required: [id, invoiceNumber, sourceAmount, currency, taxAmount, savingsAmount, spendingAmount, createdAt, movementStatus]
+    TaxReserveReport:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        basis:
+          type: string
+          enum: [confirmed_internal_ledger_entries]
+        taxAdvice:
+          type: boolean
+          enum: [false]
+        movementStatus:
+          type: string
+          enum: [internal_ledger_only]
+        totals:
+          type: array
+          items:
+            type: object
+            properties:
+              currency:
+                type: string
+              openingBalance:
+                type: string
+              allocatedDuringPeriod:
+                type: string
+              closingBalance:
+                type: string
+            required: [currency, openingBalance, allocatedDuringPeriod, closingBalance]
+        entries:
+          type: array
+          items:
+            type: object
+            properties:
+              allocationId:
+                type: string
+                format: uuid
+              paymentId:
+                type: string
+                format: uuid
+              invoiceNumber:
+                type: string
+              recordedAt:
+                type: string
+                format: date-time
+              currency:
+                type: string
+              sourceAmount:
+                type: string
+              taxPercent:
+                type: integer
+              taxReserveAmount:
+                type: string
+              internalOnly:
+                type: boolean
+            required: [allocationId, paymentId, invoiceNumber, recordedAt, currency, sourceAmount, taxPercent, taxReserveAmount, internalOnly]
+      required: [from, to, basis, taxAdvice, movementStatus, totals, entries]
+    SavingsGoalInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        currency:
+          type: string
+          pattern: "^[A-Z0-9]{2,12}$"
+        targetAmount:
+          type: string
+          pattern: "^(?:0|[1-9][0-9]{0,41})(?:\\.[0-9]{1,36})?$"
+        targetDate:
+          type: ["string", "null"]
+          format: date
+      required: [name, currency, targetAmount]
+    SavingsGoalUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        targetAmount:
+          type: string
+          pattern: "^(?:0|[1-9][0-9]{0,41})(?:\\.[0-9]{1,36})?$"
+        targetDate:
+          type: ["string", "null"]
+          format: date
+        status:
+          type: string
+          enum: [active, paused]
+    SavingsGoalContributionInput:
+      type: object
+      properties:
+        allocationEventId:
+          type: string
+          format: uuid
+        amount:
+          type: string
+          pattern: "^(?:0|[1-9][0-9]{0,41})(?:\\.[0-9]{1,36})?$"
+      required: [allocationEventId, amount]
+    SavingsGoalContributionResult:
+      type: object
+      properties:
+        contribution:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            goalId:
+              type: string
+              format: uuid
+            allocationEventId:
+              type: string
+              format: uuid
+            amount:
+              type: string
+            createdAt:
+              type: string
+              format: date-time
+          required: [id, goalId, allocationEventId, amount, createdAt]
+        alreadyRecorded:
+          type: boolean
+        movementStatus:
+          type: string
+          enum: [internal_ledger_only]
+      required: [contribution, alreadyRecorded, movementStatus]
+    SavingsSource:
+      type: object
+      properties:
+        allocationEventId:
+          type: string
+          format: uuid
+        invoiceNumber:
+          type: string
+        currency:
+          type: string
+        savingsAmount:
+          type: string
+        availableAmount:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [allocationEventId, invoiceNumber, currency, savingsAmount, availableAmount, createdAt]
+    SavingsGoal:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        currency:
+          type: string
+        targetAmount:
+          type: string
+        targetDate:
+          type: ["string", "null"]
+          format: date-time
+        status:
+          type: string
+          enum: [active, paused, completed]
+        contributedAmount:
+          type: string
+        remainingAmount:
+          type: string
+        progressPercent:
+          type: number
+        contributions:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              amount:
+                type: string
+              invoiceNumber:
+                type: string
+              createdAt:
+                type: string
+                format: date-time
+              movementStatus:
+                type: string
+                enum: [internal_ledger_only]
+            required: [id, amount, invoiceNumber, createdAt, movementStatus]
+      required: [id, name, currency, targetAmount, targetDate, status, contributedAmount, remainingAmount, progressPercent, contributions]
     InvoiceInput:
       type: object
       properties:
@@ -380,24 +1942,55 @@ components:
           type: string
           minLength: 1
           maxLength: 2000
+        lineItems:
+          type: array
+          minItems: 1
+          maxItems: 30
+          items:
+            $ref: "#/components/schemas/InvoiceLineItem"
         amount:
           type: string
           pattern: "^[0-9]+(\\.[0-9]{1,6})?$"
         currency:
           type: string
           pattern: "^[A-Z]{3}$"
-      required: [clientName, description, amount, currency]
+        dueDate:
+          type: ["string", "null"]
+          format: date
+        notes:
+          type: ["string", "null"]
+          maxLength: 2000
+        paymentTerms:
+          type: ["string", "null"]
+          maxLength: 1000
+        paymentAssetId:
+          type: string
+          minLength: 1
+          maxLength: 300
+        paymentRecipient:
+          type: string
+          minLength: 1
+          maxLength: 200
+      required: [clientName, description, amount, currency, paymentAssetId, paymentRecipient]
     Employee:
       type: object
       properties:
         id:
           type: string
           format: uuid
+        userId:
+          type: ["string", "null"]
+          format: uuid
         name:
           type: string
         email:
           type: string
           format: email
+        country:
+          type: string
+          pattern: "^([A-Z]{2})?$"
+        position:
+          type: string
         compensationAmount:
           type: string
           pattern: "^[0-9]+(\\.[0-9]{1,6})?$"
@@ -414,11 +2007,57 @@ components:
           type: string
         walletAddress:
           type: ["string", "null"]
+        payrollEnabled:
+          type: boolean
+        payoutProfileCompleted:
+          type: boolean
+        active:
+          type: boolean
         createdAt:
           type: string
           format: date-time
-      required: [id, name, email, compensationAmount, compensationCurrency, payFrequency, preferredStablecoin, preferredNetwork, walletAddress, createdAt]
-    EmployeeInput:
+      required: [id, userId, name, email, country, position, compensationAmount, compensationCurrency, payFrequency, preferredStablecoin, preferredNetwork, walletAddress, payrollEnabled, payoutProfileCompleted, active, createdAt]
+    PayrollPayoutQuote:
+      type: object
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+        providerStatus:
+          type: string
+        quote:
+          type: object
+          additionalProperties: true
+        payoutAmount:
+          type: string
+        payoutCurrency:
+          type: string
+        payoutUsdPrice:
+          type: ["string", "null"]
+      required: [paymentId, providerStatus, quote, payoutAmount, payoutCurrency, payoutUsdPrice]
+    EmployeePayrollDetails:
+      type: object
+      properties:
+        compensationAmount:
+          type: string
+          pattern: "^(?:0|[1-9][0-9]{0,23})(?:\\.[0-9]{1,6})?$"
+        compensationCurrency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+        payFrequency:
+          type: string
+          enum: [weekly, biweekly, monthly]
+      required: [compensationAmount, compensationCurrency, payFrequency]
+    EmployeePayrollEnrollment:
+      allOf:
+        - $ref: "#/components/schemas/EmployeePayrollDetails"
+        - type: object
+          properties:
+            employeeId:
+              type: string
+              format: uuid
+          required: [employeeId]
+    EmployeeInvitationInput:
       type: object
       properties:
         name:
@@ -428,25 +2067,146 @@ components:
         email:
           type: string
           format: email
-        compensationAmount:
+      required: [name, email]
+    NearIntentAsset:
+      type: object
+      properties:
+        assetId:
           type: string
-          pattern: "^[0-9]+(\\.[0-9]{1,6})?$"
-        compensationCurrency:
+        decimals:
+          type: integer
+          minimum: 0
+          maximum: 36
+        blockchain:
           type: string
-          pattern: "^[A-Z]{3}$"
-        payFrequency:
+        symbol:
           type: string
-          enum: [weekly, biweekly, monthly]
-        preferredStablecoin:
+        price:
+          type: number
+        priceUpdatedAt:
           type: string
-          enum: [USDC, USDT]
-        preferredNetwork:
+          format: date-time
+        contractAddress:
+          type: ["string", "null"]
+      required: [assetId, decimals, blockchain, symbol]
+    NearIntentAssetsResponse:
+      type: object
+      properties:
+        assets:
+          type: array
+          items:
+            $ref: "#/components/schemas/NearIntentAsset"
+        feeSchedule:
+          type: string
+          enum: [authenticated, unauthenticated]
+      required: [assets, feeSchedule]
+    NearIntentQuoteInput:
+      type: object
+      properties:
+        originAsset:
           type: string
           minLength: 1
-          maxLength: 80
-        walletAddress:
+          maxLength: 200
+        destinationAsset:
+          type: string
+          minLength: 1
+          maxLength: 200
+        amount:
+          type: string
+          pattern: "^(?:0|[1-9][0-9]{0,23})(?:\\.[0-9]{1,36})?$"
+        recipient:
+          type: string
+          minLength: 1
+          maxLength: 200
+        refundTo:
+          type: string
+          minLength: 1
+          maxLength: 200
+        slippageTolerance:
+          type: integer
+          minimum: 1
+          maximum: 5000
+          default: 100
+        swapType:
+          type: string
+          enum: [EXACT_INPUT, EXACT_OUTPUT]
+          default: EXACT_INPUT
+      required: [originAsset, destinationAsset, amount, recipient, refundTo]
+    NearIntentQuoteResult:
+      type: object
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+        quote:
+          type: object
+          additionalProperties: true
+        providerStatus:
+          type: string
+      required: [paymentId, quote, providerStatus]
+    NearIntentStatus:
+      type: object
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING_DEPOSIT, KNOWN_DEPOSIT_TX, PROCESSING, SUCCESS, INCOMPLETE_DEPOSIT, REFUNDED, FAILED]
+        updatedAt:
+          type: string
+          format: date-time
+        reconciliationStatus:
+          type: [string, "null"]
+        provider:
+          type: object
+          additionalProperties: true
+        automaticAllocation:
+          oneOf:
+            - type: object
+              properties:
+                status:
+                  type: string
+                  enum: [recorded, already_recorded]
+                allocationId:
+                  type: string
+                  format: uuid
+                movementStatus:
+                  type: string
+                  enum: [internal_ledger_only]
+              required: [status, movementStatus]
+            - type: object
+              properties:
+                status:
+                  type: string
+                  enum: [disabled, ineligible, retryable_failure]
+              required: [status]
+            - type: "null"
+      required: [paymentId, status, updatedAt, provider, automaticAllocation]
+    NearIntentPaymentRecord:
+      type: object
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+        originAsset:
           type: ["string", "null"]
-      required: [name, email, compensationAmount, compensationCurrency, payFrequency, preferredStablecoin, preferredNetwork]
+        destinationAsset:
+          type: ["string", "null"]
+        providerStatus:
+          type: string
+        providerReference:
+          type: ["string", "null"]
+        quotePayload:
+          type: [object, "null"]
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        statusCheckedAt:
+          type: ["string", "null"]
+          format: date-time
+      required: [paymentId, originAsset, destinationAsset, providerStatus, providerReference, quotePayload, createdAt, statusCheckedAt]
     Allocations:
       type: object
       properties:
@@ -489,6 +2249,18 @@ components:
         automationEnabled:
           type: boolean
       required: [taxPercent, savingsPercent, spendingPercent, automationEnabled]
+    InternalIncomeAutomationSetting:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        updatedAt:
+          type: ["string", "null"]
+          format: date-time
+        movementStatus:
+          type: string
+          enum: [internal_ledger_only]
+      required: [enabled, updatedAt, movementStatus]
     Vendor:
       type: object
       properties:
@@ -514,6 +2286,92 @@ components:
         completedTrades:
           type: integer
       required: [id, businessName, country, currency, paymentMethods, indicativeRate, rating, completedTrades]
+    VendorOffer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        vendorId:
+          type: string
+          format: uuid
+        assetId:
+          type: string
+        assetSymbol:
+          type: string
+        assetNetwork:
+          type: string
+        currency:
+          type: string
+        paymentMethods:
+          type: array
+          items:
+            type: string
+        exchangeRate:
+          type: string
+        availableLiquidity:
+          type: string
+        minimumAmount:
+          type: string
+        maximumAmount:
+          type: string
+        status:
+          type: string
+          enum: [active, paused]
+      required: [id, vendorId, assetId, assetSymbol, assetNetwork, currency, paymentMethods, exchangeRate, availableLiquidity, minimumAmount, maximumAmount, status]
+    VendorOfferInput:
+      type: object
+      properties:
+        assetId:
+          type: string
+          minLength: 3
+          maxLength: 200
+        exchangeRate:
+          type: string
+          pattern: "^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,18})?$"
+        availableLiquidity:
+          type: string
+          pattern: "^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,18})?$"
+        minimumAmount:
+          type: string
+          pattern: "^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,18})?$"
+        maximumAmount:
+          type: string
+          pattern: "^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,18})?$"
+        paymentMethods:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        status:
+          type: string
+          enum: [active, paused]
+      required: [assetId, exchangeRate, availableLiquidity, minimumAmount, maximumAmount, paymentMethods, status]
+    VendorOfferAssetResponse:
+      type: object
+      properties:
+        assets:
+          type: array
+          items:
+            $ref: "#/components/schemas/NearIntentAsset"
+      required: [assets]
+    VendorMarketOffer:
+      allOf:
+        - $ref: "#/components/schemas/VendorOffer"
+        - type: object
+          properties:
+            vendorName:
+              type: string
+            country:
+              type: string
+            vendorRating:
+              type: ["number", "null"]
+            completedTrades:
+              type: integer
+            listingOnly:
+              type: boolean
+            settlementAvailable:
+              type: boolean
     VendorApplication:
       type: object
       properties:
@@ -534,7 +2392,12 @@ components:
             type: string
         status:
           type: string
-          enum: [pending]
+          enum: [pending, approved, declined]
+        reviewNote:
+          type: ["string", "null"]
+        reviewedAt:
+          type: ["string", "null"]
+          format: date-time
         createdAt:
           type: string
           format: date-time
@@ -566,7 +2429,7 @@ components:
           type: string
         recordType:
           type: string
-          enum: [invoice, payroll_profile, vendor_application]
+          enum: [invoice, payroll_profile, payroll_cycle, payroll_payment, vendor_application, near_intent_payment, treasury_allocation, savings_goal_contribution]
         title:
           type: string
         status:
@@ -574,5 +2437,28 @@ components:
         createdAt:
           type: string
           format: date-time
+        detail:
+          type: string
+          description: Context and asset amounts for payment quote records.
+        quoteId:
+          type: string
+          description: Related NEAR Intents quote identifier.
+        depositAddress:
+          type: string
+          description: Provider deposit address for this specific quote.
+        transactionLinks:
+          type: array
+          description: Source and destination chain transaction hashes with explorer links.
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              hash:
+                type: string
+              url:
+                type: string
+                format: uri
+            required: [label, hash, url]
       required: [id, recordType, title, status, createdAt]
 

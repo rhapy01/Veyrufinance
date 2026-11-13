@@ -5,6 +5,7 @@
  * Trezu financial workspace API
  * OpenAPI spec version: 0.1.0
  */
+import type { InvoiceLineItem } from './invoiceLineItem';
 
 export interface InvoiceInput {
   /**
@@ -19,8 +20,35 @@ export interface InvoiceInput {
      * @maxLength 2000
      */
   description: string;
+  /**
+     * @minItems 1
+     * @maxItems 30
+     */
+  lineItems?: InvoiceLineItem[];
   /** @pattern ^[0-9]+(\.[0-9]{1,6})?$ */
   amount: string;
   /** @pattern ^[A-Z]{3}$ */
   currency: string;
+  /** @nullable */
+  dueDate?: Date | null;
+  /**
+     * @maxLength 2000
+     * @nullable
+     */
+  notes?: string | null;
+  /**
+     * @maxLength 1000
+     * @nullable
+     */
+  paymentTerms?: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 300
+     */
+  paymentAssetId: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  paymentRecipient: string;
 }

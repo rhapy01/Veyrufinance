@@ -5,6 +5,13 @@ dist
 tmp
 out-tsc
 *.tsbuildinfo
+
+# package manager and installed dependencies
+node_modules/
+.pnpm-store/
+
+# local logs
+*.log
 .expo
 .expo-shared
 .next
@@ -53,3 +60,5 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+.neon
+.env.local

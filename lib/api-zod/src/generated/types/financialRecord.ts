@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { FinancialRecordRecordType } from './financialRecordRecordType';
+import type { FinancialRecordTransactionLinksItem } from './financialRecordTransactionLinksItem';
 
 export interface FinancialRecord {
   id: string;
@@ -13,4 +14,12 @@ export interface FinancialRecord {
   title: string;
   status: string;
   createdAt: Date;
+  /** Context and asset amounts for payment quote records. */
+  detail?: string;
+  /** Related NEAR Intents quote identifier. */
+  quoteId?: string;
+  /** Provider deposit address for this specific quote. */
+  depositAddress?: string;
+  /** Source and destination chain transaction hashes with explorer links. */
+  transactionLinks?: FinancialRecordTransactionLinksItem[];
 }

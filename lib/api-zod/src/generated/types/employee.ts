@@ -10,8 +10,13 @@ import type { EmployeePreferredStablecoin } from './employeePreferredStablecoin'
 
 export interface Employee {
   id: string;
+  /** @nullable */
+  userId: string | null;
   name: string;
   email: string;
+  /** @pattern ^[A-Z]{2}$ */
+  country: string;
+  position: string;
   /** @pattern ^[0-9]+(\.[0-9]{1,6})?$ */
   compensationAmount: string;
   /** @pattern ^[A-Z]{3}$ */
@@ -21,5 +26,8 @@ export interface Employee {
   preferredNetwork: string;
   /** @nullable */
   walletAddress: string | null;
+  payrollEnabled: boolean;
+  payoutProfileCompleted: boolean;
+  active: boolean;
   createdAt: Date;
 }

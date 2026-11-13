@@ -11,4 +11,6 @@ export type VendorApplicationStatus = typeof VendorApplicationStatus[keyof typeo
 
 export const VendorApplicationStatus = {
   pending: 'pending',
+  approved: 'approved',
+  declined: 'declined',
 } as const;

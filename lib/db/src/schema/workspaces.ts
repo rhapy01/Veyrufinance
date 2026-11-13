@@ -45,7 +45,6 @@ export const workspaceMembersTable = pgTable(
       table.workspaceId,
       table.userId,
     ),
-    uniqueIndex("trezu_workspace_members_user_unique").on(table.userId),
   ],
 );
 

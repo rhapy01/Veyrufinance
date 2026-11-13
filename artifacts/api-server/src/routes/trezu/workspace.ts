@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, count, eq } from "drizzle-orm";
+import { and, asc, count, eq } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import {
   auditLogsTable,
@@ -20,7 +20,7 @@ import { requireWorkspaceMember } from "../../middlewares/auth";
 
 const router: IRouter = Router();
 
-async function getProfile(userId: string) {
+async function getProfile(userId: string, selectedWorkspaceId?: string) {
   const [membership] = await db
     .select({
       workspaceId: workspacesTable.id,
@@ -33,20 +33,39 @@ async function getProfile(userId: string) {
       workspacesTable,
       eq(workspacesTable.id, workspaceMembersTable.workspaceId),
     )
-    .where(eq(workspaceMembersTable.userId, userId))
+    .where(and(
+      eq(workspaceMembersTable.userId, userId),
+      selectedWorkspaceId ? eq(workspaceMembersTable.workspaceId, selectedWorkspaceId) : undefined,
+    ))
+    .orderBy(asc(workspaceMembersTable.createdAt))
     .limit(1);
 
+  const platformAdminIds = (process.env.TREZU_PLATFORM_ADMIN_USER_IDS ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
   return {
     userId,
     workspaceId: membership?.workspaceId ?? null,
     workspaceName: membership?.workspaceName ?? null,
     workspaceType: membership?.workspaceType ?? null,
-    role: membership?.role ?? null,
+    role: platformAdminIds.includes(userId) ? "platform_admin" : membership?.role ?? null,
   };
 }
 
 router.get("/profile", async (req, res): Promise<void> => {
-  res.json(GetProfileResponse.parse(await getProfile(req.trezuUserId!)));
+  res.json(GetProfileResponse.parse(await getProfile(req.trezuUserId!, req.header("x-trezu-workspace-id"))));
+});
+
+router.get("/workspaces", async (req, res): Promise<void> => {
+  const workspaces = await db
+    .select({ id: workspacesTable.id, name: workspacesTable.name, type: workspacesTable.type, role: workspaceMembersTable.role })
+    .from(workspaceMembersTable)
+    .innerJoin(workspacesTable, eq(workspacesTable.id, workspaceMembersTable.workspaceId))
+    .where(eq(workspaceMembersTable.userId, req.trezuUserId!))
+    .orderBy(asc(workspaceMembersTable.createdAt));
+  res.setHeader("Cache-Control", "private, no-store");
+  res.json({ workspaces });
 });
 
 router.post("/workspaces", async (req, res): Promise<void> => {
@@ -120,7 +139,7 @@ router.get("/dashboard", requireWorkspaceMember, async (req, res): Promise<void>
       db
         .select({ value: count() })
         .from(employeesTable)
-        .where(eq(employeesTable.workspaceId, workspaceId)),
+        .where(and(eq(employeesTable.workspaceId, workspaceId), eq(employeesTable.active, true))),
       db
         .select({ value: count() })
         .from(vendorApplicationsTable)

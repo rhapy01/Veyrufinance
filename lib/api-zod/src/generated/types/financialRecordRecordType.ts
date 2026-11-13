@@ -12,5 +12,10 @@ export type FinancialRecordRecordType = typeof FinancialRecordRecordType[keyof t
 export const FinancialRecordRecordType = {
   invoice: 'invoice',
   payroll_profile: 'payroll_profile',
+  payroll_cycle: 'payroll_cycle',
+  payroll_payment: 'payroll_payment',
   vendor_application: 'vendor_application',
+  near_intent_payment: 'near_intent_payment',
+  treasury_allocation: 'treasury_allocation',
+  savings_goal_contribution: 'savings_goal_contribution',
 } as const;

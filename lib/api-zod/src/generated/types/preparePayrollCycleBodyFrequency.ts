@@ -6,10 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type EmployeeInputPayFrequency = typeof EmployeeInputPayFrequency[keyof typeof EmployeeInputPayFrequency];
+export type PreparePayrollCycleBodyFrequency = typeof PreparePayrollCycleBodyFrequency[keyof typeof PreparePayrollCycleBodyFrequency];
 
 
-export const EmployeeInputPayFrequency = {
+export const PreparePayrollCycleBodyFrequency = {
   weekly: 'weekly',
   biweekly: 'biweekly',
   monthly: 'monthly',

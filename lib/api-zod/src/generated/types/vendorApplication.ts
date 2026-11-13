@@ -16,5 +16,9 @@ export interface VendorApplication {
   currency: string;
   paymentMethods: string[];
   status: VendorApplicationStatus;
+  /** @nullable */
+  reviewNote?: string | null;
+  /** @nullable */
+  reviewedAt?: Date | null;
   createdAt: Date;
 }

@@ -5,19 +5,31 @@
  * Trezu financial workspace API
  * OpenAPI spec version: 0.1.0
  */
+import type { InvoiceLineItem } from './invoiceLineItem';
 import type { InvoiceStatus } from './invoiceStatus';
 
 export interface Invoice {
   id: string;
+  /** @nullable */
+  publicToken: string | null;
+  /** Relative public checkout path, returned when this invoice is created with settlement details */
+  paymentLink?: string;
   invoiceNumber: string;
   clientName: string;
   /** @nullable */
   clientEmail: string | null;
   description: string;
+  lineItems: InvoiceLineItem[];
   /** @pattern ^[0-9]+(\.[0-9]{1,6})?$ */
   amount: string;
   /** @pattern ^[A-Z]{3}$ */
   currency: string;
+  /** @nullable */
+  dueDate: Date | null;
+  /** @nullable */
+  notes: string | null;
+  /** @nullable */
+  paymentTerms: string | null;
   status: InvoiceStatus;
   createdAt: Date;
 }

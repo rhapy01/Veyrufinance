@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2400 1800" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0.86" y2="1">
+      <stop offset="0" stop-color="#71bdb8"/>
+      <stop offset="0.48" stop-color="#acd9d4"/>
+      <stop offset="1" stop-color="#d9e8cf"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="46%" cy="20%" r="55%">
+      <stop offset="0" stop-color="#eff4d4" stop-opacity=".78"/>
+      <stop offset=".42" stop-color="#ccebd7" stop-opacity=".32"/>
+      <stop offset="1" stop-color="#b2e0d9" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ridge-back" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#98c994"/>
+      <stop offset="1" stop-color="#d0dd9c"/>
+    </linearGradient>
+    <linearGradient id="ridge-mid" x1="0.1" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#8ecb6c"/>
+      <stop offset=".55" stop-color="#b4d962"/>
+      <stop offset="1" stop-color="#d4df84"/>
+    </linearGradient>
+    <linearGradient id="ridge-front" x1="0.15" y1="0" x2="0.82" y2="1">
+      <stop offset="0" stop-color="#5eb46e"/>
+      <stop offset=".53" stop-color="#8cc95d"/>
+      <stop offset="1" stop-color="#c2d875"/>
+    </linearGradient>
+    <linearGradient id="ridge-deep" x1="0.05" y1="0" x2="0.78" y2="1">
+      <stop offset="0" stop-color="#2d8866"/>
+      <stop offset=".65" stop-color="#5ca558"/>
+      <stop offset="1" stop-color="#94bc61"/>
+    </linearGradient>
+    <filter id="soften" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="46"/>
+    </filter>
+    <filter id="grain">
+      <feTurbulence type="fractalNoise" baseFrequency=".78" numOctaves="2" stitchTiles="stitch"/>
+      <feColorMatrix values=".5 0 0 0 .4 .5 0 0 0 .4 .5 0 0 0 .4 0 0 0 .07 0"/>
+    </filter>
+  </defs>
+  <rect width="2400" height="1800" fill="url(#sky)"/>
+  <rect width="2400" height="1220" fill="url(#sun)"/>
+  <g filter="url(#soften)" opacity=".36">
+    <ellipse cx="210" cy="570" rx="430" ry="205" fill="#b9edca"/>
+    <ellipse cx="2100" cy="400" rx="500" ry="230" fill="#8ad0c3"/>
+    <ellipse cx="1190" cy="770" rx="770" ry="165" fill="#e5ecc3"/>
+  </g>
+  <path d="M0 1032c197-41 333-118 540-96 203 21 275 128 488 118 214-11 298-149 500-141 241 9 359 158 589 129 113-14 203-52 283-85v843H0z" fill="url(#ridge-back)" opacity=".8"/>
+  <path d="M0 1186c243-151 461-175 654-102 181 68 241 197 450 191 248-8 366-217 588-191 234 27 367 214 708 126v590H0z" fill="url(#ridge-mid)"/>
+  <path d="M0 1350c232-89 376-172 574-153 224 21 305 182 526 192 251 12 418-171 633-169 236 3 381 166 667 175v409H0z" fill="url(#ridge-front)"/>
+  <path d="M0 1512c254-149 452-176 653-131 217 48 315 200 539 194 246-7 396-179 619-168 214 11 368 141 589 138v255H0z" fill="url(#ridge-deep)"/>
+  <path d="M0 1659c223-84 395-104 594-66 206 40 329 158 555 145 225-13 369-136 571-137 276-2 453 107 680 76v123H0z" fill="#538f56" opacity=".56"/>
+  <rect width="2400" height="1800" filter="url(#grain)" opacity=".2"/>
+</svg>

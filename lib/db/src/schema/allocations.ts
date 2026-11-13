@@ -2,6 +2,7 @@ import { createInsertSchema } from "drizzle-zod";
 import {
   boolean,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -20,7 +21,11 @@ export const allocationSettingsTable = pgTable(
     taxPercent: integer("tax_percent").notNull(),
     savingsPercent: integer("savings_percent").notNull(),
     spendingPercent: integer("spending_percent").notNull(),
+    treasuryDestinations: jsonb("treasury_destinations").$type<{ tax: string; savings: string; spending: string }>().notNull().default({ tax: "", savings: "", spending: "" }),
     automationEnabled: boolean("automation_enabled").notNull().default(false),
+    internalIncomeAutomationEnabled: boolean("internal_income_automation_enabled").notNull().default(false),
+    internalIncomeAutomationUpdatedBy: text("internal_income_automation_updated_by"),
+    internalIncomeAutomationUpdatedAt: timestamp("internal_income_automation_updated_at", { withTimezone: true }),
     updatedBy: text("updated_by"),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()

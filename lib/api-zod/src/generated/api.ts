@@ -30,6 +30,19 @@ export const GetProfileResponse = zod.object({
 
 
 /**
+ * @summary List all workspaces available to the authenticated user
+ */
+export const ListWorkspacesResponse = zod.object({
+  "workspaces": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "type": zod.enum(['freelancer', 'business']),
+  "role": zod.enum(['owner', 'admin', 'employee', 'vendor', 'platform_admin'])
+}))
+})
+
+
+/**
  * @summary Create a workspace for the authenticated user
  */
 export const createWorkspaceBodyNameMax = 120;
@@ -68,120 +81,668 @@ export const GetDashboardResponse = zod.object({
 /**
  * @summary List invoices for the current workspace
  */
+export const getInvoicesResponseLineItemsItemDescriptionMax = 240;
+
+export const getInvoicesResponseLineItemsItemAmountRegExp = new RegExp('^[0-9]+(\\.[0-9]{1,6})?$');
 export const getInvoicesResponseAmountRegExp = new RegExp('^[0-9]+(\\.[0-9]{1,6})?$');
 export const getInvoicesResponseCurrencyRegExp = new RegExp('^[A-Z]{3}$');
 
 
 export const GetInvoicesResponseItem = zod.object({
   "id": zod.string().uuid(),
+  "publicToken": zod.string().nullable(),
+  "paymentLink": zod.string().optional().describe('Relative public checkout path, returned when this invoice is created with settlement details'),
   "invoiceNumber": zod.string(),
   "clientName": zod.string(),
   "clientEmail": zod.string().nullable(),
   "description": zod.string(),
+  "lineItems": zod.array(zod.object({
+  "description": zod.string().min(1).max(getInvoicesResponseLineItemsItemDescriptionMax),
+  "amount": zod.string().regex(getInvoicesResponseLineItemsItemAmountRegExp)
+})),
   "amount": zod.string().regex(getInvoicesResponseAmountRegExp),
   "currency": zod.string().regex(getInvoicesResponseCurrencyRegExp),
-  "status": zod.enum(['draft']),
+  "dueDate": zod.coerce.date().nullable(),
+  "notes": zod.string().nullable(),
+  "paymentTerms": zod.string().nullable(),
+  "status": zod.enum(['draft', 'sent', 'viewed', 'partially_paid', 'paid', 'overdue', 'cancelled']),
   "createdAt": zod.coerce.date()
 })
 export const GetInvoicesResponse = zod.array(GetInvoicesResponseItem)
 
 
 /**
- * @summary Create a draft invoice
+ * @summary Create an invoice and its payment link
  */
 export const createInvoiceBodyClientNameMax = 160;
 
 export const createInvoiceBodyDescriptionMax = 2000;
 
+export const createInvoiceBodyLineItemsItemDescriptionMax = 240;
+
+export const createInvoiceBodyLineItemsItemAmountRegExp = new RegExp('^[0-9]+(\\.[0-9]{1,6})?$');
+export const createInvoiceBodyLineItemsMax = 30;
+
 export const createInvoiceBodyAmountRegExp = new RegExp('^[0-9]+(\\.[0-9]{1,6})?$');
 export const createInvoiceBodyCurrencyRegExp = new RegExp('^[A-Z]{3}$');
+export const createInvoiceBodyNotesMax = 2000;
+
+export const createInvoiceBodyPaymentTermsMax = 1000;
+
+export const createInvoiceBodyPaymentAssetIdMax = 300;
+
+export const createInvoiceBodyPaymentRecipientMax = 200;
+
 
 
 export const CreateInvoiceBody = zod.object({
   "clientName": zod.string().min(1).max(createInvoiceBodyClientNameMax),
   "clientEmail": zod.string().email().nullish(),
   "description": zod.string().min(1).max(createInvoiceBodyDescriptionMax),
+  "lineItems": zod.array(zod.object({
+  "description": zod.string().min(1).max(createInvoiceBodyLineItemsItemDescriptionMax),
+  "amount": zod.string().regex(createInvoiceBodyLineItemsItemAmountRegExp)
+})).min(1).max(createInvoiceBodyLineItemsMax).optional(),
   "amount": zod.string().regex(createInvoiceBodyAmountRegExp),
-  "currency": zod.string().regex(createInvoiceBodyCurrencyRegExp)
+  "currency": zod.string().regex(createInvoiceBodyCurrencyRegExp),
+  "dueDate": zod.coerce.date().nullish(),
+  "notes": zod.string().max(createInvoiceBodyNotesMax).nullish(),
+  "paymentTerms": zod.string().max(createInvoiceBodyPaymentTermsMax).nullish(),
+  "paymentAssetId": zod.string().min(1).max(createInvoiceBodyPaymentAssetIdMax),
+  "paymentRecipient": zod.string().min(1).max(createInvoiceBodyPaymentRecipientMax)
 })
 
+export const createInvoiceResponseLineItemsItemDescriptionMax = 240;
+
+export const createInvoiceResponseLineItemsItemAmountRegExp = new RegExp('^[0-9]+(\\.[0-9]{1,6})?$');
 export const createInvoiceResponseAmountRegExp = new RegExp('^[0-9]+(\\.[0-9]{1,6})?$');
 export const createInvoiceResponseCurrencyRegExp = new RegExp('^[A-Z]{3}$');
 
 
 export const CreateInvoiceResponse = zod.object({
   "id": zod.string().uuid(),
+  "publicToken": zod.string().nullable(),
+  "paymentLink": zod.string().optional().describe('Relative public checkout path, returned when this invoice is created with settlement details'),
   "invoiceNumber": zod.string(),
   "clientName": zod.string(),
   "clientEmail": zod.string().nullable(),
   "description": zod.string(),
+  "lineItems": zod.array(zod.object({
+  "description": zod.string().min(1).max(createInvoiceResponseLineItemsItemDescriptionMax),
+  "amount": zod.string().regex(createInvoiceResponseLineItemsItemAmountRegExp)
+})),
   "amount": zod.string().regex(createInvoiceResponseAmountRegExp),
   "currency": zod.string().regex(createInvoiceResponseCurrencyRegExp),
-  "status": zod.enum(['draft']),
+  "dueDate": zod.coerce.date().nullable(),
+  "notes": zod.string().nullable(),
+  "paymentTerms": zod.string().nullable(),
+  "status": zod.enum(['draft', 'sent', 'viewed', 'partially_paid', 'paid', 'overdue', 'cancelled']),
   "createdAt": zod.coerce.date()
 })
 
 
 /**
+ * @summary Publish a draft invoice as a token-denominated payment link
+ */
+export const CreateInvoicePaymentLinkParams = zod.object({
+  "invoiceId": zod.coerce.string().uuid()
+})
+
+export const createInvoicePaymentLinkBodyPaymentAssetIdMax = 200;
+
+export const createInvoicePaymentLinkBodyPaymentRecipientMax = 200;
+
+
+
+export const CreateInvoicePaymentLinkBody = zod.object({
+  "paymentAssetId": zod.string().min(1).max(createInvoicePaymentLinkBodyPaymentAssetIdMax),
+  "paymentRecipient": zod.string().min(1).max(createInvoicePaymentLinkBodyPaymentRecipientMax)
+})
+
+export const CreateInvoicePaymentLinkResponse = zod.object({
+  "invoiceId": zod.string().uuid(),
+  "status": zod.enum(['sent', 'viewed', 'paid']),
+  "paymentLink": zod.string(),
+  "currency": zod.string()
+})
+
+
+/**
+ * @summary Download a saved invoice as a PDF
+ */
+export const DownloadInvoicePdfParams = zod.object({
+  "invoiceId": zod.coerce.string().uuid()
+})
+
+export const DownloadInvoicePdfResponse = zod.unknown()
+
+
+/**
+ * @summary View a published invoice by its share token
+ */
+export const getPublicInvoicePathTokenMin = 32;
+export const getPublicInvoicePathTokenMax = 64;
+
+
+
+export const GetPublicInvoiceParams = zod.object({
+  "token": zod.coerce.string().min(getPublicInvoicePathTokenMin).max(getPublicInvoicePathTokenMax)
+})
+
+export const getPublicInvoiceResponseLineItemsItemDescriptionMax = 240;
+
+export const getPublicInvoiceResponseLineItemsItemAmountRegExp = new RegExp('^[0-9]+(\\.[0-9]{1,6})?$');
+
+
+export const GetPublicInvoiceResponse = zod.object({
+  "invoiceNumber": zod.string(),
+  "clientName": zod.string(),
+  "description": zod.string(),
+  "lineItems": zod.array(zod.object({
+  "description": zod.string().min(1).max(getPublicInvoiceResponseLineItemsItemDescriptionMax),
+  "amount": zod.string().regex(getPublicInvoiceResponseLineItemsItemAmountRegExp)
+})),
+  "dueDate": zod.coerce.date().nullable(),
+  "notes": zod.string().nullable(),
+  "paymentTerms": zod.string().nullable(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "status": zod.enum(['sent', 'viewed', 'partially_paid', 'paid', 'overdue']),
+  "destinationAssetId": zod.string(),
+  "destinationAssetSymbol": zod.string(),
+  "paymentRecipient": zod.string()
+})
+
+
+/**
+ * @summary Download an invoice PDF from its payment link
+ */
+export const downloadPublicInvoicePdfPathTokenMin = 32;
+export const downloadPublicInvoicePdfPathTokenMax = 64;
+
+
+
+export const DownloadPublicInvoicePdfParams = zod.object({
+  "token": zod.coerce.string().min(downloadPublicInvoicePdfPathTokenMin).max(downloadPublicInvoicePdfPathTokenMax)
+})
+
+export const DownloadPublicInvoicePdfResponse = zod.unknown()
+
+
+/**
+ * @summary List supported source assets for a published invoice payment
+ */
+export const GetPublicInvoicePaymentAssetsParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const getPublicInvoicePaymentAssetsResponseAssetsItemDecimalsMin = 0;
+export const getPublicInvoicePaymentAssetsResponseAssetsItemDecimalsMax = 36;
+
+export const getPublicInvoicePaymentAssetsResponseDestinationDecimalsMin = 0;
+export const getPublicInvoicePaymentAssetsResponseDestinationDecimalsMax = 36;
+
+
+
+export const GetPublicInvoicePaymentAssetsResponse = zod.object({
+  "assets": zod.array(zod.object({
+  "assetId": zod.string(),
+  "decimals": zod.number().int().min(getPublicInvoicePaymentAssetsResponseAssetsItemDecimalsMin).max(getPublicInvoicePaymentAssetsResponseAssetsItemDecimalsMax),
+  "blockchain": zod.string(),
+  "symbol": zod.string(),
+  "price": zod.number().optional(),
+  "priceUpdatedAt": zod.coerce.date().optional(),
+  "contractAddress": zod.string().nullish()
+})),
+  "destination": zod.object({
+  "assetId": zod.string(),
+  "decimals": zod.number().int().min(getPublicInvoicePaymentAssetsResponseDestinationDecimalsMin).max(getPublicInvoicePaymentAssetsResponseDestinationDecimalsMax),
+  "blockchain": zod.string(),
+  "symbol": zod.string(),
+  "price": zod.number().optional(),
+  "priceUpdatedAt": zod.coerce.date().optional(),
+  "contractAddress": zod.string().nullish()
+})
+})
+
+
+/**
+ * @summary Create an exact-output NEAR Intents quote for an invoice
+ */
+export const CreatePublicInvoicePaymentQuoteParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const createPublicInvoicePaymentQuoteHeaderIdempotencyKeyMin = 8;
+export const createPublicInvoicePaymentQuoteHeaderIdempotencyKeyMax = 128;
+
+
+
+export const CreatePublicInvoicePaymentQuoteHeader = zod.object({
+  "Idempotency-Key": zod.string().min(createPublicInvoicePaymentQuoteHeaderIdempotencyKeyMin).max(createPublicInvoicePaymentQuoteHeaderIdempotencyKeyMax)
+})
+
+export const createPublicInvoicePaymentQuoteBodyOriginAssetMax = 200;
+
+export const createPublicInvoicePaymentQuoteBodyRefundToMax = 200;
+
+export const createPublicInvoicePaymentQuoteBodySlippageToleranceDefault = 100;
+export const createPublicInvoicePaymentQuoteBodySlippageToleranceMax = 5000;
+
+
+
+export const CreatePublicInvoicePaymentQuoteBody = zod.object({
+  "originAsset": zod.string().min(1).max(createPublicInvoicePaymentQuoteBodyOriginAssetMax),
+  "refundTo": zod.string().min(1).max(createPublicInvoicePaymentQuoteBodyRefundToMax),
+  "slippageTolerance": zod.number().int().min(1).max(createPublicInvoicePaymentQuoteBodySlippageToleranceMax).default(createPublicInvoicePaymentQuoteBodySlippageToleranceDefault)
+})
+
+export const CreatePublicInvoicePaymentQuoteResponse = zod.object({
+  "paymentId": zod.string().uuid(),
+  "quote": zod.record(zod.string(), zod.unknown()),
+  "providerStatus": zod.string()
+})
+
+
+/**
+ * @summary Refresh provider settlement status for an invoice payment
+ */
+export const GetPublicInvoicePaymentStatusParams = zod.object({
+  "token": zod.coerce.string(),
+  "paymentId": zod.coerce.string().uuid()
+})
+
+export const GetPublicInvoicePaymentStatusResponse = zod.object({
+  "paymentId": zod.string().uuid(),
+  "status": zod.enum(['PENDING_DEPOSIT', 'KNOWN_DEPOSIT_TX', 'PROCESSING', 'SUCCESS', 'INCOMPLETE_DEPOSIT', 'REFUNDED', 'FAILED']),
+  "updatedAt": zod.coerce.date(),
+  "reconciliationStatus": zod.string().nullish(),
+  "provider": zod.record(zod.string(), zod.unknown()),
+  "automaticAllocation": zod.union([zod.object({
+  "status": zod.enum(['recorded', 'already_recorded']),
+  "allocationId": zod.string().uuid().optional(),
+  "movementStatus": zod.enum(['internal_ledger_only'])
+}),zod.object({
+  "status": zod.enum(['disabled', 'ineligible', 'retryable_failure'])
+}),zod.null()])
+})
+
+
+/**
+ * @summary List provider-confirmed receipts for a published invoice
+ */
+export const GetPublicInvoiceReceiptsParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetPublicInvoiceReceiptsResponseItem = zod.object({
+  "paymentId": zod.string().uuid(),
+  "settledAt": zod.coerce.date()
+})
+export const GetPublicInvoiceReceiptsResponse = zod.array(GetPublicInvoiceReceiptsResponseItem)
+
+
+/**
+ * @summary Download the PDF receipt for a provider-confirmed invoice payment
+ */
+export const DownloadPublicInvoiceReceiptParams = zod.object({
+  "token": zod.coerce.string(),
+  "paymentId": zod.coerce.string().uuid()
+})
+
+export const DownloadPublicInvoiceReceiptResponse = zod.unknown()
+
+
+/**
  * @summary List employee records for the current workspace
  */
+export const getEmployeesResponseCountryRegExp = new RegExp('^([A-Z]{2})?$');
 export const getEmployeesResponseCompensationAmountRegExp = new RegExp('^[0-9]+(\\.[0-9]{1,6})?$');
 export const getEmployeesResponseCompensationCurrencyRegExp = new RegExp('^[A-Z]{3}$');
 
 
 export const GetEmployeesResponseItem = zod.object({
   "id": zod.string().uuid(),
+  "userId": zod.string().uuid().nullable(),
   "name": zod.string(),
   "email": zod.string().email(),
+  "country": zod.string().regex(getEmployeesResponseCountryRegExp),
+  "position": zod.string(),
   "compensationAmount": zod.string().regex(getEmployeesResponseCompensationAmountRegExp),
   "compensationCurrency": zod.string().regex(getEmployeesResponseCompensationCurrencyRegExp),
   "payFrequency": zod.enum(['weekly', 'biweekly', 'monthly']),
   "preferredStablecoin": zod.enum(['USDC', 'USDT']),
   "preferredNetwork": zod.string(),
   "walletAddress": zod.string().nullable(),
+  "payrollEnabled": zod.boolean(),
+  "payoutProfileCompleted": zod.boolean(),
+  "active": zod.boolean(),
   "createdAt": zod.coerce.date()
 })
 export const GetEmployeesResponse = zod.array(GetEmployeesResponseItem)
 
 
 /**
- * @summary Add an employee payroll record
+ * @summary Add an invited team member to payroll
  */
-export const createEmployeeBodyNameMax = 160;
-
-export const createEmployeeBodyCompensationAmountRegExp = new RegExp('^[0-9]+(\\.[0-9]{1,6})?$');
-export const createEmployeeBodyCompensationCurrencyRegExp = new RegExp('^[A-Z]{3}$');
-export const createEmployeeBodyPreferredNetworkMax = 80;
+export const enrollEmployeeInPayrollBodyOneCompensationAmountRegExp = new RegExp('^(?:0|[1-9][0-9]{0,23})(?:\\.[0-9]{1,6})?$');
+export const enrollEmployeeInPayrollBodyOneCompensationCurrencyRegExp = new RegExp('^[A-Z]{3}$');
 
 
+export const EnrollEmployeeInPayrollBody = zod.object({
+  "compensationAmount": zod.string().regex(enrollEmployeeInPayrollBodyOneCompensationAmountRegExp),
+  "compensationCurrency": zod.string().regex(enrollEmployeeInPayrollBodyOneCompensationCurrencyRegExp),
+  "payFrequency": zod.enum(['weekly', 'biweekly', 'monthly'])
+}).and(zod.object({
+  "employeeId": zod.string().uuid()
+}))
 
-export const CreateEmployeeBody = zod.object({
-  "name": zod.string().min(1).max(createEmployeeBodyNameMax),
-  "email": zod.string().email(),
-  "compensationAmount": zod.string().regex(createEmployeeBodyCompensationAmountRegExp),
-  "compensationCurrency": zod.string().regex(createEmployeeBodyCompensationCurrencyRegExp),
-  "payFrequency": zod.enum(['weekly', 'biweekly', 'monthly']),
-  "preferredStablecoin": zod.enum(['USDC', 'USDT']),
-  "preferredNetwork": zod.string().min(1).max(createEmployeeBodyPreferredNetworkMax),
-  "walletAddress": zod.string().nullish()
-})
-
-export const createEmployeeResponseCompensationAmountRegExp = new RegExp('^[0-9]+(\\.[0-9]{1,6})?$');
-export const createEmployeeResponseCompensationCurrencyRegExp = new RegExp('^[A-Z]{3}$');
+export const enrollEmployeeInPayrollResponseCountryRegExp = new RegExp('^([A-Z]{2})?$');
+export const enrollEmployeeInPayrollResponseCompensationAmountRegExp = new RegExp('^[0-9]+(\\.[0-9]{1,6})?$');
+export const enrollEmployeeInPayrollResponseCompensationCurrencyRegExp = new RegExp('^[A-Z]{3}$');
 
 
-export const CreateEmployeeResponse = zod.object({
+export const EnrollEmployeeInPayrollResponse = zod.object({
   "id": zod.string().uuid(),
+  "userId": zod.string().uuid().nullable(),
   "name": zod.string(),
   "email": zod.string().email(),
-  "compensationAmount": zod.string().regex(createEmployeeResponseCompensationAmountRegExp),
-  "compensationCurrency": zod.string().regex(createEmployeeResponseCompensationCurrencyRegExp),
+  "country": zod.string().regex(enrollEmployeeInPayrollResponseCountryRegExp),
+  "position": zod.string(),
+  "compensationAmount": zod.string().regex(enrollEmployeeInPayrollResponseCompensationAmountRegExp),
+  "compensationCurrency": zod.string().regex(enrollEmployeeInPayrollResponseCompensationCurrencyRegExp),
   "payFrequency": zod.enum(['weekly', 'biweekly', 'monthly']),
   "preferredStablecoin": zod.enum(['USDC', 'USDT']),
   "preferredNetwork": zod.string(),
   "walletAddress": zod.string().nullable(),
+  "payrollEnabled": zod.boolean(),
+  "payoutProfileCompleted": zod.boolean(),
+  "active": zod.boolean(),
   "createdAt": zod.coerce.date()
 })
+
+
+/**
+ * @summary Update payroll compensation for an enrolled team member
+ */
+export const UpdateEmployeeParams = zod.object({
+  "employeeId": zod.coerce.string().uuid()
+})
+
+export const updateEmployeeBodyCompensationAmountRegExp = new RegExp('^(?:0|[1-9][0-9]{0,23})(?:\\.[0-9]{1,6})?$');
+export const updateEmployeeBodyCompensationCurrencyRegExp = new RegExp('^[A-Z]{3}$');
+
+
+export const UpdateEmployeeBody = zod.object({
+  "compensationAmount": zod.string().regex(updateEmployeeBodyCompensationAmountRegExp),
+  "compensationCurrency": zod.string().regex(updateEmployeeBodyCompensationCurrencyRegExp),
+  "payFrequency": zod.enum(['weekly', 'biweekly', 'monthly'])
+})
+
+export const updateEmployeeResponseCountryRegExp = new RegExp('^([A-Z]{2})?$');
+export const updateEmployeeResponseCompensationAmountRegExp = new RegExp('^[0-9]+(\\.[0-9]{1,6})?$');
+export const updateEmployeeResponseCompensationCurrencyRegExp = new RegExp('^[A-Z]{3}$');
+
+
+export const UpdateEmployeeResponse = zod.object({
+  "id": zod.string().uuid(),
+  "userId": zod.string().uuid().nullable(),
+  "name": zod.string(),
+  "email": zod.string().email(),
+  "country": zod.string().regex(updateEmployeeResponseCountryRegExp),
+  "position": zod.string(),
+  "compensationAmount": zod.string().regex(updateEmployeeResponseCompensationAmountRegExp),
+  "compensationCurrency": zod.string().regex(updateEmployeeResponseCompensationCurrencyRegExp),
+  "payFrequency": zod.enum(['weekly', 'biweekly', 'monthly']),
+  "preferredStablecoin": zod.enum(['USDC', 'USDT']),
+  "preferredNetwork": zod.string(),
+  "walletAddress": zod.string().nullable(),
+  "payrollEnabled": zod.boolean(),
+  "payoutProfileCompleted": zod.boolean(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Archive an employee from future payroll cycles while retaining payroll history
+ */
+export const RemoveEmployeeParams = zod.object({
+  "employeeId": zod.coerce.string().uuid()
+})
+
+export const RemoveEmployeeResponse = zod.unknown()
+
+
+/**
+ * @summary Invite a team member to join Trezu
+ */
+export const inviteEmployeeBodyNameMax = 160;
+
+
+
+export const InviteEmployeeBody = zod.object({
+  "name": zod.string().min(1).max(inviteEmployeeBodyNameMax),
+  "email": zod.string().email()
+})
+
+export const inviteEmployeeResponseCountryRegExp = new RegExp('^([A-Z]{2})?$');
+export const inviteEmployeeResponseCompensationAmountRegExp = new RegExp('^[0-9]+(\\.[0-9]{1,6})?$');
+export const inviteEmployeeResponseCompensationCurrencyRegExp = new RegExp('^[A-Z]{3}$');
+
+
+export const InviteEmployeeResponse = zod.object({
+  "id": zod.string().uuid(),
+  "userId": zod.string().uuid().nullable(),
+  "name": zod.string(),
+  "email": zod.string().email(),
+  "country": zod.string().regex(inviteEmployeeResponseCountryRegExp),
+  "position": zod.string(),
+  "compensationAmount": zod.string().regex(inviteEmployeeResponseCompensationAmountRegExp),
+  "compensationCurrency": zod.string().regex(inviteEmployeeResponseCompensationCurrencyRegExp),
+  "payFrequency": zod.enum(['weekly', 'biweekly', 'monthly']),
+  "preferredStablecoin": zod.enum(['USDC', 'USDT']),
+  "preferredNetwork": zod.string(),
+  "walletAddress": zod.string().nullable(),
+  "payrollEnabled": zod.boolean(),
+  "payoutProfileCompleted": zod.boolean(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List payroll cycles with independently tracked employee payments
+ */
+export const GetPayrollCyclesResponse = zod.unknown()
+
+
+/**
+ * @summary Snapshot matching employee compensation for review
+ */
+export const preparePayrollCycleBodyIdempotencyKeyMin = 8;
+export const preparePayrollCycleBodyIdempotencyKeyMax = 160;
+
+
+
+export const PreparePayrollCycleBody = zod.object({
+  "frequency": zod.enum(['weekly', 'biweekly', 'monthly']),
+  "periodStart": zod.coerce.date(),
+  "periodEnd": zod.coerce.date(),
+  "paymentDate": zod.coerce.date(),
+  "idempotencyKey": zod.string().min(preparePayrollCycleBodyIdempotencyKeyMin).max(preparePayrollCycleBodyIdempotencyKeyMax)
+})
+
+export const PreparePayrollCycleResponse = zod.void()
+
+
+/**
+ * @summary Approve a draft payroll cycle and queue independent payment items
+ */
+export const ApprovePayrollCycleParams = zod.object({
+  "cycleId": zod.coerce.string().uuid()
+})
+
+export const ApprovePayrollCycleResponse = zod.unknown()
+
+
+/**
+ * @summary Create a signed exact output quote for one approved employee payment
+ */
+export const PreparePayrollItemPayoutParams = zod.object({
+  "itemId": zod.coerce.string().uuid()
+})
+
+export const preparePayrollItemPayoutHeaderIdempotencyKeyMin = 8;
+export const preparePayrollItemPayoutHeaderIdempotencyKeyMax = 128;
+
+
+
+export const PreparePayrollItemPayoutHeader = zod.object({
+  "Idempotency-Key": zod.string().min(preparePayrollItemPayoutHeaderIdempotencyKeyMin).max(preparePayrollItemPayoutHeaderIdempotencyKeyMax)
+})
+
+export const preparePayrollItemPayoutBodyRefundToMax = 200;
+
+
+
+export const PreparePayrollItemPayoutBody = zod.object({
+  "originAsset": zod.string(),
+  "refundTo": zod.string().min(1).max(preparePayrollItemPayoutBodyRefundToMax)
+})
+
+export const PreparePayrollItemPayoutResponse = zod.object({
+  "paymentId": zod.string().uuid(),
+  "providerStatus": zod.string(),
+  "quote": zod.record(zod.string(), zod.unknown()),
+  "payoutAmount": zod.string(),
+  "payoutCurrency": zod.string(),
+  "payoutUsdPrice": zod.string().nullable()
+})
+
+
+/**
+ * @summary Refresh provider settlement status for one employee payout
+ */
+export const CheckPayrollItemPayoutStatusParams = zod.object({
+  "itemId": zod.coerce.string().uuid()
+})
+
+export const CheckPayrollItemPayoutStatusResponse = zod.unknown()
+
+
+/**
+ * @summary Download a payslip after a matched provider-confirmed payment
+ */
+export const DownloadEmployeePayslipParams = zod.object({
+  "itemId": zod.coerce.string().uuid()
+})
+
+export const DownloadEmployeePayslipResponse = zod.unknown()
+
+
+/**
+ * @summary List currently supported NEAR Intents assets
+ */
+export const getNearIntentAssetsResponseAssetsItemDecimalsMin = 0;
+export const getNearIntentAssetsResponseAssetsItemDecimalsMax = 36;
+
+
+
+export const GetNearIntentAssetsResponse = zod.object({
+  "assets": zod.array(zod.object({
+  "assetId": zod.string(),
+  "decimals": zod.number().int().min(getNearIntentAssetsResponseAssetsItemDecimalsMin).max(getNearIntentAssetsResponseAssetsItemDecimalsMax),
+  "blockchain": zod.string(),
+  "symbol": zod.string(),
+  "price": zod.number().optional(),
+  "priceUpdatedAt": zod.coerce.date().optional(),
+  "contractAddress": zod.string().nullish()
+})),
+  "feeSchedule": zod.enum(['authenticated', 'unauthenticated'])
+})
+
+
+/**
+ * @summary Request a quote for a supported cross-chain payment
+ */
+export const createNearIntentQuoteHeaderIdempotencyKeyMin = 8;
+export const createNearIntentQuoteHeaderIdempotencyKeyMax = 128;
+
+
+
+export const CreateNearIntentQuoteHeader = zod.object({
+  "Idempotency-Key": zod.string().min(createNearIntentQuoteHeaderIdempotencyKeyMin).max(createNearIntentQuoteHeaderIdempotencyKeyMax)
+})
+
+export const createNearIntentQuoteBodyOriginAssetMax = 200;
+
+export const createNearIntentQuoteBodyDestinationAssetMax = 200;
+
+export const createNearIntentQuoteBodyAmountRegExp = new RegExp('^(?:0|[1-9][0-9]{0,23})(?:\\.[0-9]{1,36})?$');
+export const createNearIntentQuoteBodyRecipientMax = 200;
+
+export const createNearIntentQuoteBodyRefundToMax = 200;
+
+export const createNearIntentQuoteBodySlippageToleranceDefault = 100;
+export const createNearIntentQuoteBodySlippageToleranceMax = 5000;
+
+export const createNearIntentQuoteBodySwapTypeDefault = `EXACT_INPUT`;
+
+export const CreateNearIntentQuoteBody = zod.object({
+  "originAsset": zod.string().min(1).max(createNearIntentQuoteBodyOriginAssetMax),
+  "destinationAsset": zod.string().min(1).max(createNearIntentQuoteBodyDestinationAssetMax),
+  "amount": zod.string().regex(createNearIntentQuoteBodyAmountRegExp),
+  "recipient": zod.string().min(1).max(createNearIntentQuoteBodyRecipientMax),
+  "refundTo": zod.string().min(1).max(createNearIntentQuoteBodyRefundToMax),
+  "slippageTolerance": zod.number().int().min(1).max(createNearIntentQuoteBodySlippageToleranceMax).default(createNearIntentQuoteBodySlippageToleranceDefault),
+  "swapType": zod.enum(['EXACT_INPUT', 'EXACT_OUTPUT']).default(createNearIntentQuoteBodySwapTypeDefault)
+})
+
+export const CreateNearIntentQuoteResponse = zod.object({
+  "paymentId": zod.string().uuid(),
+  "quote": zod.record(zod.string(), zod.unknown()),
+  "providerStatus": zod.string()
+})
+
+
+/**
+ * @summary Retrieve provider settlement status for a quote deposit address
+ */
+export const GetNearIntentStatusQueryParams = zod.object({
+  "paymentId": zod.coerce.string().uuid()
+})
+
+export const GetNearIntentStatusResponse = zod.object({
+  "paymentId": zod.string().uuid(),
+  "status": zod.enum(['PENDING_DEPOSIT', 'KNOWN_DEPOSIT_TX', 'PROCESSING', 'SUCCESS', 'INCOMPLETE_DEPOSIT', 'REFUNDED', 'FAILED']),
+  "updatedAt": zod.coerce.date(),
+  "reconciliationStatus": zod.string().nullish(),
+  "provider": zod.record(zod.string(), zod.unknown()),
+  "automaticAllocation": zod.union([zod.object({
+  "status": zod.enum(['recorded', 'already_recorded']),
+  "allocationId": zod.string().uuid().optional(),
+  "movementStatus": zod.enum(['internal_ledger_only'])
+}),zod.object({
+  "status": zod.enum(['disabled', 'ineligible', 'retryable_failure'])
+}),zod.null()])
+})
+
+
+/**
+ * @summary List recent NEAR Intents payment quotes for the current workspace
+ */
+export const GetNearIntentPaymentsResponseItem = zod.object({
+  "paymentId": zod.string().uuid(),
+  "originAsset": zod.string().nullable(),
+  "destinationAsset": zod.string().nullable(),
+  "providerStatus": zod.string(),
+  "providerReference": zod.string().nullable(),
+  "quotePayload": zod.record(zod.string(), zod.unknown()).nullable(),
+  "createdAt": zod.coerce.date(),
+  "statusCheckedAt": zod.coerce.date().nullable()
+})
+export const GetNearIntentPaymentsResponse = zod.array(GetNearIntentPaymentsResponseItem)
 
 
 /**
@@ -251,6 +812,279 @@ export const UpdateAllocationsResponse = zod.object({
 
 
 /**
+ * @summary List reconciled invoice payments available for internal allocation
+ */
+export const GetTreasuryAllocationEligiblePaymentsResponseItem = zod.object({
+  "paymentId": zod.string().uuid(),
+  "invoiceNumber": zod.string().nullable(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "settledAt": zod.coerce.date(),
+  "hasSavedPreferences": zod.boolean(),
+  "preview": zod.union([zod.object({
+  "tax": zod.string(),
+  "savings": zod.string(),
+  "spending": zod.string(),
+  "taxPercent": zod.number().int(),
+  "savingsPercent": zod.number().int(),
+  "spendingPercent": zod.number().int()
+}),zod.null()])
+})
+export const GetTreasuryAllocationEligiblePaymentsResponse = zod.array(GetTreasuryAllocationEligiblePaymentsResponseItem)
+
+
+/**
+ * @summary Read whether confirmed income is automatically split in the internal ledger
+ */
+export const GetInternalIncomeAutomationResponse = zod.object({
+  "enabled": zod.boolean(),
+  "updatedAt": zod.coerce.date().nullable(),
+  "movementStatus": zod.enum(['internal_ledger_only'])
+})
+
+
+/**
+ * @summary Enable or pause automatic internal allocation of matched invoice payments
+ */
+export const UpdateInternalIncomeAutomationBody = zod.object({
+  "enabled": zod.boolean(),
+  "expectedUpdatedAt": zod.coerce.date().nullable(),
+  "expectedPreferencesUpdatedAt": zod.coerce.date()
+})
+
+export const UpdateInternalIncomeAutomationResponse = zod.object({
+  "enabled": zod.boolean(),
+  "updatedAt": zod.coerce.date().nullable(),
+  "movementStatus": zod.enum(['internal_ledger_only'])
+})
+
+
+/**
+ * @summary Record an internal allocation against a confirmed invoice payment
+ */
+export const ApplyTreasuryAllocationParams = zod.object({
+  "paymentId": zod.coerce.string().uuid()
+})
+
+export const applyTreasuryAllocationBodyTaxPercentMin = 0;
+export const applyTreasuryAllocationBodyTaxPercentMax = 100;
+
+export const applyTreasuryAllocationBodySavingsPercentMin = 0;
+export const applyTreasuryAllocationBodySavingsPercentMax = 100;
+
+export const applyTreasuryAllocationBodySpendingPercentMin = 0;
+export const applyTreasuryAllocationBodySpendingPercentMax = 100;
+
+
+
+export const ApplyTreasuryAllocationBody = zod.object({
+  "taxPercent": zod.number().int().min(applyTreasuryAllocationBodyTaxPercentMin).max(applyTreasuryAllocationBodyTaxPercentMax),
+  "savingsPercent": zod.number().int().min(applyTreasuryAllocationBodySavingsPercentMin).max(applyTreasuryAllocationBodySavingsPercentMax),
+  "spendingPercent": zod.number().int().min(applyTreasuryAllocationBodySpendingPercentMin).max(applyTreasuryAllocationBodySpendingPercentMax),
+  "updatedAt": zod.coerce.date()
+})
+
+export const ApplyTreasuryAllocationResponse = zod.object({
+  "event": zod.object({
+  "id": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "sourceAmount": zod.string(),
+  "currency": zod.string(),
+  "taxAmount": zod.string(),
+  "savingsAmount": zod.string(),
+  "spendingAmount": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "movementStatus": zod.enum(['internal_ledger_only'])
+}),
+  "alreadyRecorded": zod.boolean()
+})
+
+
+/**
+ * @summary List internal allocation history for the workspace
+ */
+export const GetTreasuryAllocationHistoryResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "sourceAmount": zod.string(),
+  "currency": zod.string(),
+  "taxAmount": zod.string(),
+  "savingsAmount": zod.string(),
+  "spendingAmount": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "movementStatus": zod.enum(['internal_ledger_only'])
+})
+export const GetTreasuryAllocationHistoryResponse = zod.array(GetTreasuryAllocationHistoryResponseItem)
+
+
+/**
+ * @summary Summarize confirmed tax reserve ledger balances for an inclusive date range
+ */
+export const GetTaxReserveReportQueryParams = zod.object({
+  "from": zod.date(),
+  "to": zod.date()
+})
+
+export const GetTaxReserveReportResponse = zod.object({
+  "from": zod.coerce.date(),
+  "to": zod.coerce.date(),
+  "basis": zod.enum(['confirmed_internal_ledger_entries']),
+  "taxAdvice": zod.literal(false),
+  "movementStatus": zod.enum(['internal_ledger_only']),
+  "totals": zod.array(zod.object({
+  "currency": zod.string(),
+  "openingBalance": zod.string(),
+  "allocatedDuringPeriod": zod.string(),
+  "closingBalance": zod.string()
+})),
+  "entries": zod.array(zod.object({
+  "allocationId": zod.string().uuid(),
+  "paymentId": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "recordedAt": zod.coerce.date(),
+  "currency": zod.string(),
+  "sourceAmount": zod.string(),
+  "taxPercent": zod.number().int(),
+  "taxReserveAmount": zod.string(),
+  "internalOnly": zod.boolean()
+}))
+})
+
+
+/**
+ * @summary List savings goals and internal contribution history
+ */
+export const GetTreasurySavingsGoalsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "currency": zod.string(),
+  "targetAmount": zod.string(),
+  "targetDate": zod.coerce.date().nullable(),
+  "status": zod.enum(['active', 'paused', 'completed']),
+  "contributedAmount": zod.string(),
+  "remainingAmount": zod.string(),
+  "progressPercent": zod.number(),
+  "contributions": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "amount": zod.string(),
+  "invoiceNumber": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "movementStatus": zod.enum(['internal_ledger_only'])
+}))
+})
+export const GetTreasurySavingsGoalsResponse = zod.array(GetTreasurySavingsGoalsResponseItem)
+
+
+/**
+ * @summary Create a savings goal
+ */
+export const createTreasurySavingsGoalBodyNameMax = 120;
+
+export const createTreasurySavingsGoalBodyCurrencyRegExp = new RegExp('^[A-Z0-9]{2,12}$');
+export const createTreasurySavingsGoalBodyTargetAmountRegExp = new RegExp('^(?:0|[1-9][0-9]{0,41})(?:\\.[0-9]{1,36})?$');
+
+
+export const CreateTreasurySavingsGoalBody = zod.object({
+  "name": zod.string().min(1).max(createTreasurySavingsGoalBodyNameMax),
+  "currency": zod.string().regex(createTreasurySavingsGoalBodyCurrencyRegExp),
+  "targetAmount": zod.string().regex(createTreasurySavingsGoalBodyTargetAmountRegExp),
+  "targetDate": zod.coerce.date().nullish()
+})
+
+export const CreateTreasurySavingsGoalResponse = zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "currency": zod.string(),
+  "targetAmount": zod.string(),
+  "targetDate": zod.coerce.date().nullable(),
+  "status": zod.enum(['active', 'paused', 'completed']),
+  "contributedAmount": zod.string(),
+  "remainingAmount": zod.string(),
+  "progressPercent": zod.number(),
+  "contributions": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "amount": zod.string(),
+  "invoiceNumber": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "movementStatus": zod.enum(['internal_ledger_only'])
+}))
+})
+
+
+/**
+ * @summary Update savings goal details or pause state
+ */
+export const UpdateTreasurySavingsGoalParams = zod.object({
+  "goalId": zod.coerce.string().uuid()
+})
+
+export const updateTreasurySavingsGoalBodyNameMax = 120;
+
+export const updateTreasurySavingsGoalBodyTargetAmountRegExp = new RegExp('^(?:0|[1-9][0-9]{0,41})(?:\\.[0-9]{1,36})?$');
+
+
+export const UpdateTreasurySavingsGoalBody = zod.object({
+  "name": zod.string().min(1).max(updateTreasurySavingsGoalBodyNameMax).optional(),
+  "targetAmount": zod.string().regex(updateTreasurySavingsGoalBodyTargetAmountRegExp).optional(),
+  "targetDate": zod.coerce.date().nullish(),
+  "status": zod.enum(['active', 'paused']).optional()
+})
+
+export const UpdateTreasurySavingsGoalResponse = zod.unknown()
+
+
+/**
+ * @summary List unassigned savings from recorded internal income allocations
+ */
+export const GetTreasurySavingsSourcesResponseItem = zod.object({
+  "allocationEventId": zod.string().uuid(),
+  "invoiceNumber": zod.string(),
+  "currency": zod.string(),
+  "savingsAmount": zod.string(),
+  "availableAmount": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+export const GetTreasurySavingsSourcesResponse = zod.array(GetTreasurySavingsSourcesResponseItem)
+
+
+/**
+ * @summary Reclassify an internal savings allocation toward a goal
+ */
+export const ContributeToTreasurySavingsGoalParams = zod.object({
+  "goalId": zod.coerce.string().uuid()
+})
+
+export const contributeToTreasurySavingsGoalHeaderIdempotencyKeyMin = 8;
+export const contributeToTreasurySavingsGoalHeaderIdempotencyKeyMax = 128;
+
+
+
+export const ContributeToTreasurySavingsGoalHeader = zod.object({
+  "Idempotency-Key": zod.string().min(contributeToTreasurySavingsGoalHeaderIdempotencyKeyMin).max(contributeToTreasurySavingsGoalHeaderIdempotencyKeyMax)
+})
+
+export const contributeToTreasurySavingsGoalBodyAmountRegExp = new RegExp('^(?:0|[1-9][0-9]{0,41})(?:\\.[0-9]{1,36})?$');
+
+
+export const ContributeToTreasurySavingsGoalBody = zod.object({
+  "allocationEventId": zod.string().uuid(),
+  "amount": zod.string().regex(contributeToTreasurySavingsGoalBodyAmountRegExp)
+})
+
+export const ContributeToTreasurySavingsGoalResponse = zod.object({
+  "contribution": zod.object({
+  "id": zod.string().uuid(),
+  "goalId": zod.string().uuid(),
+  "allocationEventId": zod.string().uuid(),
+  "amount": zod.string(),
+  "createdAt": zod.coerce.date()
+}),
+  "alreadyRecorded": zod.boolean(),
+  "movementStatus": zod.enum(['internal_ledger_only'])
+})
+
+
+/**
  * @summary List approved vendors
  */
 export const getVendorsQueryCountryMin = 2;
@@ -284,6 +1118,185 @@ export const GetVendorsResponse = zod.array(GetVendorsResponseItem)
 
 
 /**
+ * @summary List active offers for currently supported NEAR Intents assets
+ */
+export const listActiveVendorOffersQueryCountryRegExp = new RegExp('^[A-Z]{2}$');
+export const listActiveVendorOffersQueryCurrencyRegExp = new RegExp('^[A-Z]{3}$');
+
+
+export const ListActiveVendorOffersQueryParams = zod.object({
+  "country": zod.coerce.string().regex(listActiveVendorOffersQueryCountryRegExp).optional(),
+  "currency": zod.coerce.string().regex(listActiveVendorOffersQueryCurrencyRegExp).optional()
+})
+
+export const ListActiveVendorOffersResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "vendorId": zod.string().uuid(),
+  "assetId": zod.string(),
+  "assetSymbol": zod.string(),
+  "assetNetwork": zod.string(),
+  "currency": zod.string(),
+  "paymentMethods": zod.array(zod.string()),
+  "exchangeRate": zod.string(),
+  "availableLiquidity": zod.string(),
+  "minimumAmount": zod.string(),
+  "maximumAmount": zod.string(),
+  "status": zod.enum(['active', 'paused'])
+}).and(zod.object({
+  "vendorName": zod.string().optional(),
+  "country": zod.string().optional(),
+  "vendorRating": zod.number().nullish(),
+  "completedTrades": zod.number().int().optional(),
+  "listingOnly": zod.boolean().optional(),
+  "settlementAvailable": zod.boolean().optional()
+}))
+export const ListActiveVendorOffersResponse = zod.array(ListActiveVendorOffersResponseItem)
+
+
+/**
+ * @summary List offers owned by the current approved vendor
+ */
+export const ListMyVendorOffersResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "vendorId": zod.string().uuid(),
+  "assetId": zod.string(),
+  "assetSymbol": zod.string(),
+  "assetNetwork": zod.string(),
+  "currency": zod.string(),
+  "paymentMethods": zod.array(zod.string()),
+  "exchangeRate": zod.string(),
+  "availableLiquidity": zod.string(),
+  "minimumAmount": zod.string(),
+  "maximumAmount": zod.string(),
+  "status": zod.enum(['active', 'paused'])
+})
+export const ListMyVendorOffersResponse = zod.array(ListMyVendorOffersResponseItem)
+
+
+/**
+ * @summary Publish an offer for a currently supported asset
+ */
+export const createVendorOfferBodyAssetIdMin = 3;
+export const createVendorOfferBodyAssetIdMax = 200;
+
+export const createVendorOfferBodyExchangeRateRegExp = new RegExp('^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,18})?$');
+export const createVendorOfferBodyAvailableLiquidityRegExp = new RegExp('^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,18})?$');
+export const createVendorOfferBodyMinimumAmountRegExp = new RegExp('^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,18})?$');
+export const createVendorOfferBodyMaximumAmountRegExp = new RegExp('^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,18})?$');
+
+
+
+export const CreateVendorOfferBody = zod.object({
+  "assetId": zod.string().min(createVendorOfferBodyAssetIdMin).max(createVendorOfferBodyAssetIdMax),
+  "exchangeRate": zod.string().regex(createVendorOfferBodyExchangeRateRegExp),
+  "availableLiquidity": zod.string().regex(createVendorOfferBodyAvailableLiquidityRegExp),
+  "minimumAmount": zod.string().regex(createVendorOfferBodyMinimumAmountRegExp),
+  "maximumAmount": zod.string().regex(createVendorOfferBodyMaximumAmountRegExp),
+  "paymentMethods": zod.array(zod.string()).min(1),
+  "status": zod.enum(['active', 'paused'])
+})
+
+export const CreateVendorOfferResponse = zod.object({
+  "id": zod.string().uuid(),
+  "vendorId": zod.string().uuid(),
+  "assetId": zod.string(),
+  "assetSymbol": zod.string(),
+  "assetNetwork": zod.string(),
+  "currency": zod.string(),
+  "paymentMethods": zod.array(zod.string()),
+  "exchangeRate": zod.string(),
+  "availableLiquidity": zod.string(),
+  "minimumAmount": zod.string(),
+  "maximumAmount": zod.string(),
+  "status": zod.enum(['active', 'paused'])
+})
+
+
+/**
+ * @summary Get currently supported provider assets for offer creation
+ */
+export const getVendorOfferAssetsResponseAssetsItemDecimalsMin = 0;
+export const getVendorOfferAssetsResponseAssetsItemDecimalsMax = 36;
+
+
+
+export const GetVendorOfferAssetsResponse = zod.object({
+  "assets": zod.array(zod.object({
+  "assetId": zod.string(),
+  "decimals": zod.number().int().min(getVendorOfferAssetsResponseAssetsItemDecimalsMin).max(getVendorOfferAssetsResponseAssetsItemDecimalsMax),
+  "blockchain": zod.string(),
+  "symbol": zod.string(),
+  "price": zod.number().optional(),
+  "priceUpdatedAt": zod.coerce.date().optional(),
+  "contractAddress": zod.string().nullish()
+}))
+})
+
+
+/**
+ * @summary Update vendor supplied offer terms or pause status
+ */
+export const UpdateVendorOfferParams = zod.object({
+  "offerId": zod.coerce.string().uuid()
+})
+
+export const updateVendorOfferBodyAssetIdMin = 3;
+export const updateVendorOfferBodyAssetIdMax = 200;
+
+export const updateVendorOfferBodyExchangeRateRegExp = new RegExp('^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,18})?$');
+export const updateVendorOfferBodyAvailableLiquidityRegExp = new RegExp('^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,18})?$');
+export const updateVendorOfferBodyMinimumAmountRegExp = new RegExp('^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,18})?$');
+export const updateVendorOfferBodyMaximumAmountRegExp = new RegExp('^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,18})?$');
+
+
+
+export const UpdateVendorOfferBody = zod.object({
+  "assetId": zod.string().min(updateVendorOfferBodyAssetIdMin).max(updateVendorOfferBodyAssetIdMax),
+  "exchangeRate": zod.string().regex(updateVendorOfferBodyExchangeRateRegExp),
+  "availableLiquidity": zod.string().regex(updateVendorOfferBodyAvailableLiquidityRegExp),
+  "minimumAmount": zod.string().regex(updateVendorOfferBodyMinimumAmountRegExp),
+  "maximumAmount": zod.string().regex(updateVendorOfferBodyMaximumAmountRegExp),
+  "paymentMethods": zod.array(zod.string()).min(1),
+  "status": zod.enum(['active', 'paused'])
+})
+
+export const UpdateVendorOfferResponse = zod.object({
+  "id": zod.string().uuid(),
+  "vendorId": zod.string().uuid(),
+  "assetId": zod.string(),
+  "assetSymbol": zod.string(),
+  "assetNetwork": zod.string(),
+  "currency": zod.string(),
+  "paymentMethods": zod.array(zod.string()),
+  "exchangeRate": zod.string(),
+  "availableLiquidity": zod.string(),
+  "minimumAmount": zod.string(),
+  "maximumAmount": zod.string(),
+  "status": zod.enum(['active', 'paused'])
+})
+
+
+/**
+ * @summary Get the current account's vendor application and review outcome
+ */
+export const getMyVendorApplicationResponseOneCountryRegExp = new RegExp('^[A-Z]{2}$');
+export const getMyVendorApplicationResponseOneCurrencyRegExp = new RegExp('^[A-Z]{3}$');
+
+
+export const GetMyVendorApplicationResponse = zod.union([zod.object({
+  "id": zod.string().uuid(),
+  "businessName": zod.string(),
+  "country": zod.string().regex(getMyVendorApplicationResponseOneCountryRegExp),
+  "currency": zod.string().regex(getMyVendorApplicationResponseOneCurrencyRegExp),
+  "paymentMethods": zod.array(zod.string()),
+  "status": zod.enum(['pending', 'approved', 'declined']),
+  "reviewNote": zod.string().nullish(),
+  "reviewedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date()
+}),zod.null()])
+
+
+/**
  * @summary Apply to become a verified vendor
  */
 export const createVendorApplicationBodyBusinessNameMax = 160;
@@ -310,9 +1323,45 @@ export const CreateVendorApplicationResponse = zod.object({
   "country": zod.string().regex(createVendorApplicationResponseCountryRegExp),
   "currency": zod.string().regex(createVendorApplicationResponseCurrencyRegExp),
   "paymentMethods": zod.array(zod.string()),
-  "status": zod.enum(['pending']),
+  "status": zod.enum(['pending', 'approved', 'declined']),
+  "reviewNote": zod.string().nullish(),
+  "reviewedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
+
+
+/**
+ * @summary List vendor applications for platform review
+ */
+export const ListVendorApplicationsForReviewResponse = zod.unknown()
+
+
+/**
+ * @summary Approve an application and publish its vendor listing atomically
+ */
+export const ApproveVendorApplicationParams = zod.object({
+  "applicationId": zod.coerce.string().uuid()
+})
+
+export const ApproveVendorApplicationResponse = zod.unknown()
+
+
+/**
+ * @summary Decline a vendor application and record a review reason
+ */
+export const DeclineVendorApplicationParams = zod.object({
+  "applicationId": zod.coerce.string().uuid()
+})
+
+export const declineVendorApplicationBodyReasonMax = 1000;
+
+
+
+export const DeclineVendorApplicationBody = zod.object({
+  "reason": zod.string().min(1).max(declineVendorApplicationBodyReasonMax)
+})
+
+export const DeclineVendorApplicationResponse = zod.unknown()
 
 
 /**
@@ -320,10 +1369,18 @@ export const CreateVendorApplicationResponse = zod.object({
  */
 export const GetRecordsResponseItem = zod.object({
   "id": zod.string(),
-  "recordType": zod.enum(['invoice', 'payroll_profile', 'vendor_application']),
+  "recordType": zod.enum(['invoice', 'payroll_profile', 'payroll_cycle', 'payroll_payment', 'vendor_application', 'near_intent_payment', 'treasury_allocation', 'savings_goal_contribution']),
   "title": zod.string(),
   "status": zod.string(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "detail": zod.string().optional().describe('Context and asset amounts for payment quote records.'),
+  "quoteId": zod.string().optional().describe('Related NEAR Intents quote identifier.'),
+  "depositAddress": zod.string().optional().describe('Provider deposit address for this specific quote.'),
+  "transactionLinks": zod.array(zod.object({
+  "label": zod.string(),
+  "hash": zod.string(),
+  "url": zod.string().url()
+})).optional().describe('Source and destination chain transaction hashes with explorer links.')
 })
 export const GetRecordsResponse = zod.array(GetRecordsResponseItem)
 

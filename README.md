@@ -2,7 +2,7 @@
 
 **Pay across chains. Run your business.**
 
-Veyra Finance is a global payments and finance workspace for freelancers and teams. It brings invoicing, cross-network payments, team payroll, and financial records into one place. The payer chooses an asset they hold; the invoice states the asset, network, and wallet the recipient wants. The payer reviews the route and approves it from their own wallet. Veyra coordinates the workflow and records the result, but does not hold customer funds.
+Veyra Finance is a global payments and finance workspace for freelancers and teams, built around **NEAR Intents**. It brings invoicing, cross-network payments, team payroll, and financial records into one place. The payer chooses an asset they hold; the invoice states the asset, network, and wallet the recipient wants. NEAR Intents routes the payment between supported assets and networks. The payer reviews the quote and approves it from their own wallet. Veyra coordinates the workflow and records the result, but does not hold customer funds.
 
 > **Current environment:** This is a testnet prototype. NEAR wallets and EVM wallets use test networks. NEAR Intents-style quote and settlement testing is routed through Tidepool, an independent community sandbox. There is no official first-party NEAR Intents testnet. Test tokens have no monetary value. Do not use mainnet funds with this build.
 
@@ -14,6 +14,23 @@ Veyra Finance is a global payments and finance workspace for freelancers and tea
 - **Prepare team payroll.** Organization owners/admins invite staff, maintain each person’s compensation and payout preference, create a pay run, review the total, and approve payouts from the owner’s wallet. Employees see their organization membership and pay information; ordinary members do not get payroll administration.
 - **Review records and treasury preferences.** Records reflect saved invoices, payment states, transaction references, and payroll activity. Treasury contains allocation preferences and internal records. Saving an allocation does not itself move funds or automatically route future income.
 - **Manage wallets.** View available wallet addresses and balances. Payments are signed by the relevant user’s wallet; the owner’s personal wallet is not a shared team wallet.
+
+## Completed testnet payment examples
+
+These examples come from Veyra payment records marked **SUCCESS** by the provider and reconciled to the matching invoice or payroll item. The linked hashes are the recorded source and destination transactions; the Base Sepolia recipient transaction receipts were also checked and report successful execution. User names, email addresses, and wallet addresses are intentionally omitted.
+
+| Payment | Settlement | Date (UTC) | Source transaction | Recipient transaction |
+| --- | --- | --- | --- | --- |
+| wNEAR on NEAR Testnet → USDT on Base Sepolia | 2.843466989554980530937695 wNEAR sent; 10 USDT received | 13 Nov 2026 | [NEAR transaction](https://testnet.nearblocks.io/txns/4dvfsZNNngLdFkcThqZMvbebCGUPqKPBdQsxyrL149uX) | [Base Sepolia transaction](https://sepolia.basescan.org/tx/0x1f56d8f907d03b5f42fe2c6cf4191a66edf9977530519ffc963c4836b4f2463e) |
+| wNEAR on NEAR Testnet → USDC on Base Sepolia | 0.572119838418180996022288 wNEAR sent; 2 USDC received | 13 Nov 2026 | [NEAR transaction](https://testnet.nearblocks.io/txns/2uGpgX9tAdWJigZ24Nm5SufCwhV1K8rvCGrmPtvazQ1j) | [Base Sepolia transaction](https://sepolia.basescan.org/tx/0x5b1ddffb599e6e3dc3e89441e9fa4e802685b81323011f9f42e8c13fecaf1fc2) |
+| **Organization payroll** · monthly pay run, payout 1 of 2 · **PAID** | 0.291165528366926504946908 wNEAR sent; 1.000522 USDC received for a USD 1.00 payroll item | 13 Nov 2026 | [NEAR transaction](https://testnet.nearblocks.io/txns/Czn9BF2WBWPy9xZpdC4rpZpah9hNVJGUCDtHEi4EYsmu) | [Base Sepolia transaction](https://sepolia.basescan.org/tx/0x2a4c7f4f0b8b3c913e2493ace7f62c7f3655a69b3ddbf9b50c58bf94adced8b7) |
+| **Organization payroll** · monthly pay run, payout 2 of 2 · **SUBMITTED / PROCESSING** | Quote expected 0.294077183650595769996377 wNEAR → 1.000522 USDC; Tidepool reports an invalid destination address checksum, so settlement is not confirmed | Checked 14 Nov 2026 | Same recorded [NEAR source transaction](https://testnet.nearblocks.io/txns/Czn9BF2WBWPy9xZpdC4rpZpah9hNVJGUCDtHEi4EYsmu) | No Base Sepolia recipient transaction recorded yet |
+
+The two payroll rows are from the same two-person monthly pay run. At the latest status check, payout 1 was confirmed and matched; payout 2 remained **PROCESSING** because its mixed-case EVM recipient address failed Tidepool's checksum validation. The exact address is omitted. No destination transaction or confirmed received amount exists for payout 2, so the overall pay run remained processing and must not be presented as fully paid. Tidepool's status documentation explains that a destination payout which keeps failing may stay in `PROCESSING` with an error note and require operator attention. These are testnet demonstrations, not real-money payments or a guarantee that every route is available. Provider confirmation and reconciliation are the basis for each paid status shown here.
+
+### Payroll address validation lesson
+
+This incident exposed an address-validation gap: the app previously checked that an EVM payout address had the right shape, but did not verify its EIP-55 checksum. A malformed mixed-case address therefore passed into a provider quote and the resulting deposit reached Tidepool without a confirmed recipient payout. Payroll payout-profile saving and quote preparation now validate EVM addresses with `viem`'s `getAddress`: invalid mixed-case checksums are rejected before a new quote can be requested, and valid addresses are stored in canonical checksum form. This is checksum **validation and normalization**, not “anti-checksum.” It prevents new quotes with this class of invalid address; it does not repair or refund the already-submitted quote above. That payment remains unresolved until Tidepool completes settlement or returns the deposit to its refund address.
 
 ## How payment status works
 
@@ -27,6 +44,11 @@ Creating an invoice or quote does not move money. Wallet approval submits a depo
 - **Approval is not payroll settlement.** A pay run stores the plan. The owner must have the source asset and approve the quoted payments. Provider-confirmed results are tracked per employee. Network or provider limits may require more than one wallet approval for a large run.
 - **Treasury automation is limited.** Allocation preferences and ledger classifications are application records. Automatic on-chain splitting, recurring payroll, local exchange, and P2P trading are not available in this build.
 - **Email and external services need configuration.** Account email delivery uses Google SMTP. Privy, PostgreSQL, and Tidepool connectivity are required for their respective features.
+
+## Planned, not yet available
+
+- **Full treasury automation.** The planned direction is for users to define how confirmed incoming funds should be allocated by percentage and destination, including their own wallets and supported DeFi protocols. Veyra should prepare the resulting actions from those preferences while keeping fund control and required wallet approvals with the user. Today, treasury preferences are saved records; they do not trigger automatic transfers.
+- **Peer-to-peer marketplace for faster cash-out.** A planned marketplace will help users find counterparties to exchange supported digital assets for local payment. It is not live in this build; availability will depend on supported locations, counterparties, and liquidity.
 
 ## Run locally
 

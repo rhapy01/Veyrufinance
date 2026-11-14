@@ -146,7 +146,12 @@ Database schema lives in `lib/db/src/schema/`; SQL migrations live in `lib/db/mi
 
 Veyra Finance is a financial workspace for freelancers and organizations, powered by NEAR Intents. This submission demonstrates the invoice and organization-payroll payment flows: choosing supported assets across networks, obtaining a provider quote, approving from the payer’s wallet, and tracking settlement. Direct signups choose how to start; joining an organization through its invitation adds a personal freelancer workspace without replacing the organization membership. The demonstrable payment integration uses the Tidepool community sandbox on testnet; it is not an official NEAR Intents testnet or a mainnet integration. Describe the work and testnet boundaries accurately in the project demo and submission.
 
-The public X demo post for this project is [Veyra Finance on X](https://x.com/IsaacXVoxel/status/2121521980075909593). The submission rules require a public repository, a public X demo post that says the project was built at NEAR HACKATHON and tags `@NEARProtocol` and `#NEARHackathon`, and both links submitted through the official form. The stated deadline is **14 November 2026 at 23:59 UTC**. Read the [official rules](https://nearhackathon.com/HACKATHON.md) again before submitting; the rules are authoritative and may change.
+Public X demo videos for this project:
+
+- [Organization payroll demo](https://x.com/IsaacXVoxel/status/2121632549877449175)
+- [Freelancer invoice payment demo](https://x.com/IsaacXVoxel/status/2121633752539648160)
+
+The submission rules require a public repository and a public X demo post that says the project was built at NEAR HACKATHON, tags `@NEARProtocol` and `#NEARHackathon`, and includes the demo video or screenshots. The form accepts one demo post link, so choose the video that best represents the project as the primary demo. The stated deadline is **14 November 2026 at 23:59 UTC**. Read the [official rules](https://nearhackathon.com/HACKATHON.md) again before submitting; the rules are authoritative and may change.
 
 ## Product and developer docs
 

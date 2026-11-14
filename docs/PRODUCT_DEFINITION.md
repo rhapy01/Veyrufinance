@@ -10,6 +10,7 @@ The current application is a testnet product. Tidepool supplies its test Intents
 
 ## Who uses Veyra
 
+- **Account and workspace access:** A person who signs up directly chooses to start with a freelancer workspace or create an organization. A person who joins through an organization invitation does not get that choice during invitation onboarding: accepting adds the organization membership and automatically creates their own freelancer workspace if they do not already have one. They can create and send invoices from that personal workspace while remaining an employee in the organization. These are separate workspaces and permissions, not mutually exclusive account types.
 - **Freelancer:** creates and sends client invoices, receives payment to a chosen wallet, and reviews confirmed receipts and records.
 - **Business owner or finance admin:** sends and receives invoices, prepares payroll, and reviews outstanding invoice and payroll obligations together in Bills to pay.
 - **Invoice recipient:** any active Veyra account can receive an invoice in its Received invoices dashboard, whether the account is a freelancer or belongs to a team. They review it, choose a supported source asset and payment amount, approve the wallet transaction, and follow settlement.
@@ -48,7 +49,7 @@ Veyra does not automatically move, pool, or reinvest invoice proceeds. The recei
 
 Payroll is not an automatic recurring debit. A business must have the source assets in its wallet and approve the outgoing deposits. NEAR-source payments may share one wallet approval when compatible; the individual provider settlements remain separate.
 
-Payroll administration is shown only in a business/team workspace to its owners and admins. Freelancer workspaces and regular employee members do not see payroll administration. All active account types can receive invoices.
+Payroll administration is shown only in a business/team workspace to its owners and admins. An employee's organization membership does not replace their personal freelancer workspace or their ability to create invoices. Payroll administration remains scoped to the organization; all active accounts can receive invoices.
 
 ## What must feel connected in the app
 

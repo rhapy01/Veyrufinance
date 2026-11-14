@@ -136,7 +136,7 @@ router.post("/auth/employee-invitation/accept", (async (req, res) => {
     let claims: Awaited<ReturnType<typeof verifyAccessToken>>;
     try { claims = await verifyAccessToken(authorization.slice(7)); }
     catch { res.status(401).json({ error: "Your Trezu session expired. Sign in again." }); return; }
-    const [user] = await db.select({ id: usersTable.id, email: usersTable.email }).from(usersTable).where(and(eq(usersTable.id, claims.sub), eq(usersTable.active, true))).limit(1);
+    const [user] = await db.select({ id: usersTable.id, email: usersTable.email, name: usersTable.name }).from(usersTable).where(and(eq(usersTable.id, claims.sub), eq(usersTable.active, true))).limit(1);
     if (!user || user.email.toLowerCase() !== invite.email.toLowerCase()) { res.status(403).json({ error: `Sign in with ${invite.email} to accept this team invitation.` }); return; }
     const [employee] = await db.select().from(employeesTable).where(and(eq(employeesTable.id, invite.employeeId), eq(employeesTable.workspaceId, invite.workspaceId), eq(employeesTable.email, invite.email), eq(employeesTable.active, true))).limit(1);
     if (!employee) { res.status(410).json({ error: "This team invitation is no longer active." }); return; }
@@ -155,10 +155,20 @@ router.post("/auth/employee-invitation/accept", (async (req, res) => {
     try { await db.transaction(async (tx) => {
       const [locked] = await tx.select().from(employeesTable).where(and(eq(employeesTable.id, employee.id), isNull(employeesTable.userId))).for("update").limit(1);
       if (!locked && employee.userId !== user.id) throw new Error("INVITATION_ALREADY_CLAIMED");
+      await tx.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, user.id)).for("update").limit(1);
       const [linked] = await tx.update(employeesTable).set({ userId: user.id, preferredStablecoin: asset.symbol, preferredNetwork: asset.blockchain, walletAddress: address, payoutProfileCompleted: true })
         .where(eq(employeesTable.id, employee.id)).returning({ id: employeesTable.id, workspaceId: employeesTable.workspaceId });
       await tx.insert(workspaceMembersTable).values({ workspaceId: linked!.workspaceId, userId: user.id, role: "employee" }).onConflictDoNothing();
       await tx.insert(auditLogsTable).values({ workspaceId: linked!.workspaceId, actorUserId: user.id, action: "team.member_payout_profile_completed", entityType: "employee", entityId: linked!.id, metadata: { payoutAsset: asset.assetId, network: asset.blockchain } });
+      const [freelancerMembership] = await tx.select({ id: workspaceMembersTable.id })
+        .from(workspaceMembersTable).innerJoin(workspacesTable, eq(workspacesTable.id, workspaceMembersTable.workspaceId))
+        .where(and(eq(workspaceMembersTable.userId, user.id), eq(workspacesTable.ownerUserId, user.id), eq(workspacesTable.type, "freelancer"))).limit(1);
+      if (!freelancerMembership) {
+        const [personalWorkspace] = await tx.insert(workspacesTable).values({ name: `${employee.name.trim() || "Personal"}'s freelance workspace`.slice(0, 120), type: "freelancer", ownerUserId: user.id }).returning({ id: workspacesTable.id });
+        if (!personalWorkspace) throw new Error("PERSONAL_WORKSPACE_CREATE_FAILED");
+        await tx.insert(workspaceMembersTable).values({ workspaceId: personalWorkspace.id, userId: user.id, role: "owner" });
+        await tx.insert(auditLogsTable).values({ workspaceId: personalWorkspace.id, actorUserId: user.id, action: "workspace.freelancer_created_from_team_invitation", entityType: "workspace", entityId: personalWorkspace.id, metadata: { organizationWorkspaceId: linked!.workspaceId } });
+      }
     }); } catch (error) {
       if (error instanceof Error && error.message === "INVITATION_ALREADY_CLAIMED") { res.status(409).json({ error: "This invitation has already been linked to another Trezu account." }); return; }
       throw error;
@@ -299,16 +309,17 @@ router.post("/auth/privy/session", (async (req, res) => {
 
   if (!localUser) { res.status(500).json({ error: "Could not load your Trezu account after Privy sign-in." }); return; }
   await db.transaction(async (tx) => {
-    const [pendingEmployee] = await tx.select().from(employeesTable).where(and(eq(employeesTable.email, email), eq(employeesTable.active, true), isNull(employeesTable.userId))).for("update").limit(1);
-    if (!pendingEmployee) return;
-    const [existingEmployeeLink] = await tx.select({ id: employeesTable.id }).from(employeesTable)
-      .where(and(eq(employeesTable.userId, localUser!.id), eq(employeesTable.workspaceId, pendingEmployee.workspaceId))).limit(1);
-    if (existingEmployeeLink) return;
-    const [linked] = await tx.update(employeesTable).set({ userId: localUser!.id })
-      .where(and(eq(employeesTable.id, pendingEmployee.id), isNull(employeesTable.userId))).returning({ id: employeesTable.id, workspaceId: employeesTable.workspaceId });
-    if (linked) {
-      await tx.insert(workspaceMembersTable).values({ workspaceId: linked.workspaceId, userId: localUser!.id, role: "employee" }).onConflictDoNothing();
-      await tx.insert(auditLogsTable).values({ workspaceId: linked.workspaceId, actorUserId: localUser!.id, action: "team.member_account_linked", entityType: "employee", entityId: linked.id, metadata: { email } });
+    const [joinedEmployee] = await tx.select().from(employeesTable).where(and(eq(employeesTable.userId, localUser!.id), eq(employeesTable.active, true))).for("update").limit(1);
+    if (!joinedEmployee) return;
+    await tx.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, localUser!.id)).for("update").limit(1);
+    const [freelancerMembership] = await tx.select({ id: workspaceMembersTable.id })
+      .from(workspaceMembersTable).innerJoin(workspacesTable, eq(workspacesTable.id, workspaceMembersTable.workspaceId))
+      .where(and(eq(workspaceMembersTable.userId, localUser!.id), eq(workspacesTable.ownerUserId, localUser!.id), eq(workspacesTable.type, "freelancer"))).limit(1);
+    if (!freelancerMembership) {
+      const [personalWorkspace] = await tx.insert(workspacesTable).values({ name: `${localUser!.name.trim() || "Personal"}'s freelance workspace`.slice(0, 120), type: "freelancer", ownerUserId: localUser!.id }).returning({ id: workspacesTable.id });
+      if (!personalWorkspace) throw new Error("PERSONAL_WORKSPACE_CREATE_FAILED");
+      await tx.insert(workspaceMembersTable).values({ workspaceId: personalWorkspace.id, userId: localUser!.id, role: "owner" });
+      await tx.insert(auditLogsTable).values({ workspaceId: personalWorkspace.id, actorUserId: localUser!.id, action: "workspace.freelancer_created_from_team_invitation", entityType: "workspace", entityId: personalWorkspace.id, metadata: { organizationWorkspaceId: joinedEmployee.workspaceId } });
     }
   });
   let nearWalletProvisioningError = "";

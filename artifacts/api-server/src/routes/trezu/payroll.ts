@@ -22,7 +22,10 @@ function normalizePayoutAddress(address: string, blockchain: string): string | n
   const chain = blockchain.toLowerCase();
   if (chain === "near") return /^[a-z0-9._-]{2,64}$/.test(address) ? address : null;
   if (["eth", "ethereum", "base", "op", "optimism", "arb", "arbitrum", "pol", "polygon", "bsc", "avax", "avalanche"].includes(chain)) {
-    try { return getAddress(address); } catch { return null; }
+    // Address casing is only a display/checksum convention on EVM chains.
+    // Canonicalize by bytes instead of rejecting a wallet whose mixed-case
+    // input has a typo in its EIP-55 capitalization.
+    try { return getAddress(address.toLowerCase()); } catch { return null; }
   }
   return address.length >= 20 ? address : null;
 }
@@ -108,7 +111,7 @@ router.patch("/employee/me/preferences", requireLinkedEmployee, async (req, res)
   const asset = assets.find((candidate) => candidate.assetId === assetId);
   if (!asset) { res.status(400).json({ error: "Choose an asset from the current supported payout catalog." }); return; }
   const address = normalizePayoutAddress(walletAddress.trim(), asset.blockchain);
-  if (!address) { res.status(400).json({ error: `The wallet address is invalid for ${asset.blockchain}. Check the address and its capitalization, then save it again.` }); return; }
+  if (!address) { res.status(400).json({ error: `The wallet address format is invalid for ${asset.blockchain}. Check the address and save it again.` }); return; }
   const [updated] = await db.update(employeesTable).set({ preferredStablecoin: asset.symbol, preferredNetwork: asset.blockchain, walletAddress: address, payoutProfileCompleted: true })
     .where(and(eq(employeesTable.id, req.trezuEmployeeId!), eq(employeesTable.active, true))).returning({ id: employeesTable.id, preferredStablecoin: employeesTable.preferredStablecoin, preferredNetwork: employeesTable.preferredNetwork, walletAddress: employeesTable.walletAddress });
   if (!updated) { res.status(404).json({ error: "Employee profile not found." }); return; }

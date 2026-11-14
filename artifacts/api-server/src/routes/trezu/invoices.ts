@@ -200,7 +200,13 @@ router.post(
     if (totalUnits !== amountUnits(parsed.data.amount)) {
       res.status(400).json({ error: "The invoice total must equal the sum of its line items." }); return;
     }
-    if (parsed.data.dueDate != null && !isCalendarDate(parsed.data.dueDate)) {
+    // OpenAPI's `format: date` generator emits zod.coerce.date(), so a browser
+    // date input arrives here as a Date after safeParse (not a YYYY-MM-DD
+    // string). Normalize it back to a calendar date before validating/saving.
+    const dueDate = parsed.data.dueDate instanceof Date
+      ? parsed.data.dueDate.toISOString().slice(0, 10)
+      : parsed.data.dueDate ?? null;
+    if (dueDate != null && !isCalendarDate(dueDate)) {
       res.status(400).json({ error: "Enter a valid invoice due date." }); return;
     }
 
@@ -239,7 +245,7 @@ router.post(
           lineItems: lineItems.map((line) => ({ description: line.description.trim(), amount: line.amount })),
           amount: parsed.data.amount,
           currency: parsed.data.currency.toUpperCase(),
-          dueDate: parsed.data.dueDate || null,
+          dueDate: dueDate || null,
           notes: parsed.data.notes?.trim() || null,
           paymentTerms: parsed.data.paymentTerms?.trim() || null,
           status: "draft",
@@ -254,7 +260,7 @@ router.post(
         action: "invoice.created",
         entityType: "invoice",
         entityId: id,
-        metadata: { status: "draft", currency: parsed.data.currency, lineItemCount: lineItems.length, dueDate: parsed.data.dueDate || null, paymentLinkCreated: true },
+        metadata: { status: "draft", currency: parsed.data.currency, lineItemCount: lineItems.length, dueDate: dueDate || null, paymentLinkCreated: true },
       });
       if (settlementAsset) await tx.insert(auditLogsTable).values({
         workspaceId: req.trezuWorkspaceId!, actorUserId: req.trezuUserId!, action: "invoice.payment_link_created",

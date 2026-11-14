@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { eq, and, gt, isNull } from "drizzle-orm";
 import { SignJWT, jwtVerify, createRemoteJWKSet } from "jose";
 import { createPublicKey, createHash, randomBytes, verify as verifySignature } from "node:crypto";
-import { verifyMessage } from "viem";
+import { getAddress, verifyMessage } from "viem";
 import { PrivyClient, verifyAccessToken as verifyPrivyAccessToken } from "@privy-io/node";
 import { db, usersTable, sessionsTable, employeesTable, workspacesTable, workspaceMembersTable, auditLogsTable, authActionTokensTable, linkedWalletsTable, loginSchema, registerSchema } from "@workspace/db";
 import {
@@ -148,15 +148,23 @@ router.post("/auth/employee-invitation/accept", (async (req, res) => {
     if (!asset) { res.status(400).json({ error: "Choose a currently supported payout asset and network." }); return; }
     const address = typeof req.body?.walletAddress === "string" ? req.body.walletAddress.trim() : "";
     const network = asset.blockchain.toLowerCase();
-    const validAddress = network === "near" ? /^[a-z0-9._-]{2,64}$/.test(address)
-      : ["eth", "ethereum", "base", "op", "optimism", "arb", "arbitrum", "pol", "polygon", "bsc", "avax", "avalanche"].includes(network) ? /^0x[0-9a-f]{40}$/i.test(address)
-        : address.length >= 20 && address.length <= 200;
-    if (!validAddress) { res.status(400).json({ error: `Enter a valid wallet address for ${asset.blockchain}.` }); return; }
+    let payoutAddress = address;
+    if (network === "near") {
+      if (!/^[a-z0-9._-]{2,64}$/.test(address)) { res.status(400).json({ error: `Enter a valid wallet address for ${asset.blockchain}.` }); return; }
+    } else if (["eth", "ethereum", "base", "op", "optimism", "arb", "arbitrum", "pol", "polygon", "bsc", "avax", "avalanche"].includes(network)) {
+      if (!/^0x[0-9a-f]{40}$/i.test(address)) { res.status(400).json({ error: `Enter a valid wallet address for ${asset.blockchain}.` }); return; }
+      // EVM address casing does not change the wallet. Canonicalize it here so
+      // an invitation cannot save a non-checksummed mixed-case spelling that
+      // downstream providers reject when preparing a payroll quote.
+      payoutAddress = getAddress(address.toLowerCase());
+    } else if (address.length < 20 || address.length > 200) {
+      res.status(400).json({ error: `Enter a valid wallet address for ${asset.blockchain}.` }); return;
+    }
     try { await db.transaction(async (tx) => {
       const [locked] = await tx.select().from(employeesTable).where(and(eq(employeesTable.id, employee.id), isNull(employeesTable.userId))).for("update").limit(1);
       if (!locked && employee.userId !== user.id) throw new Error("INVITATION_ALREADY_CLAIMED");
       await tx.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.id, user.id)).for("update").limit(1);
-      const [linked] = await tx.update(employeesTable).set({ userId: user.id, preferredStablecoin: asset.symbol, preferredNetwork: asset.blockchain, walletAddress: address, payoutProfileCompleted: true })
+      const [linked] = await tx.update(employeesTable).set({ userId: user.id, preferredStablecoin: asset.symbol, preferredNetwork: asset.blockchain, walletAddress: payoutAddress, payoutProfileCompleted: true })
         .where(eq(employeesTable.id, employee.id)).returning({ id: employeesTable.id, workspaceId: employeesTable.workspaceId });
       await tx.insert(workspaceMembersTable).values({ workspaceId: linked!.workspaceId, userId: user.id, role: "employee" }).onConflictDoNothing();
       await tx.insert(auditLogsTable).values({ workspaceId: linked!.workspaceId, actorUserId: user.id, action: "team.member_payout_profile_completed", entityType: "employee", entityId: linked!.id, metadata: { payoutAsset: asset.assetId, network: asset.blockchain } });

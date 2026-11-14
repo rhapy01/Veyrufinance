@@ -30,7 +30,7 @@ The two payroll rows are from the same two-person monthly pay run. At the latest
 
 ### Payroll address validation lesson
 
-This incident exposed an address-validation gap: the app previously checked that an EVM payout address had the right shape, but did not verify its EIP-55 checksum. A malformed mixed-case address therefore passed into a provider quote and the resulting deposit reached Tidepool without a confirmed recipient payout. Payroll payout-profile saving and quote preparation now validate EVM addresses with `viem`'s `getAddress`: invalid mixed-case checksums are rejected before a new quote can be requested, and valid addresses are stored in canonical checksum form. This is checksum **validation and normalization**, not “anti-checksum.” It prevents new quotes with this class of invalid address; it does not repair or refund the already-submitted quote above. That payment remains unresolved until Tidepool completes settlement or returns the deposit to its refund address.
+This incident exposed an address-normalization gap: an EVM address with incorrect mixed-case EIP-55 capitalization passed into a provider quote and the resulting deposit reached Tidepool without a confirmed recipient payout. EVM address casing does not change the underlying wallet, but Tidepool's parser rejected that spelling. Payroll invitation acceptance, payout-profile saving, and quote preparation now normalize EVM addresses into canonical checksum form before requesting a new quote. This prevents a casing mismatch from blocking a new route; it does not repair or refund the already-submitted quote above. That payment remains unresolved until Tidepool completes settlement or returns the deposit to its refund address.
 
 ## How payment status works
 
@@ -138,7 +138,7 @@ Database schema lives in `lib/db/src/schema/`; SQL migrations live in `lib/db/mi
 
 Veyra Finance is a financial workspace for freelancers and organizations, powered by NEAR Intents. This submission demonstrates the invoice and organization-payroll payment flows: choosing supported assets across networks, obtaining a provider quote, approving from the payer’s wallet, and tracking settlement. Direct signups choose how to start; joining an organization through its invitation adds a personal freelancer workspace without replacing the organization membership. The demonstrable payment integration uses the Tidepool community sandbox on testnet; it is not an official NEAR Intents testnet or a mainnet integration. Describe the work and testnet boundaries accurately in the project demo and submission.
 
-The submission rules require a public repository, a public X demo post that says the project was built at NEAR HACKATHON and tags `@NEARProtocol` and `#NEARHackathon`, and both links submitted through the official form. The stated deadline is **14 November 2026 at 23:59 UTC**. Read the [official rules](https://nearhackathon.com/HACKATHON.md) again before submitting; the rules are authoritative and may change.
+The public X demo post for this project is [Veyra Finance on X](https://x.com/IsaacXVoxel/status/2121521980075909593). The submission rules require a public repository, a public X demo post that says the project was built at NEAR HACKATHON and tags `@NEARProtocol` and `#NEARHackathon`, and both links submitted through the official form. The stated deadline is **14 November 2026 at 23:59 UTC**. Read the [official rules](https://nearhackathon.com/HACKATHON.md) again before submitting; the rules are authoritative and may change.
 
 ## Product and developer docs
 

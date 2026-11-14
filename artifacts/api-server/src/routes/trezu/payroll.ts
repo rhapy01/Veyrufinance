@@ -370,14 +370,6 @@ router.post("/payroll/cycles/prepare", requireWorkspaceMember, requireWorkspaceR
     for (const item of items) totals.set(item.currency, (totals.get(item.currency) ?? 0n) + payrollUnits(item.amount));
     res.json({ cycle: existing[0], items, totals: Object.fromEntries([...totals].map(([currency, units]) => [currency, payrollAmount(units)])), executionStatus: "not_started", alreadyPrepared: true }); return;
   }
-  const duplicatePeriod = await db.select({ id: payrollCyclesTable.id }).from(payrollCyclesTable).where(and(
-    eq(payrollCyclesTable.workspaceId, req.trezuWorkspaceId!),
-    eq(payrollCyclesTable.frequency, frequency),
-    eq(payrollCyclesTable.periodStart, periodStart),
-    eq(payrollCyclesTable.periodEnd, periodEnd),
-    eq(payrollCyclesTable.paymentDate, paymentDate),
-  )).limit(1);
-  if (duplicatePeriod.length) { res.status(409).json({ error: "A pay run already exists for this frequency and period. Open that run to refresh, review, or discard it." }); return; }
   const employees = await db.select().from(employeesTable).where(and(eq(employeesTable.workspaceId, req.trezuWorkspaceId!), eq(employeesTable.active, true), eq(employeesTable.payrollEnabled, true), eq(employeesTable.payoutProfileCompleted, true), eq(employeesTable.payFrequency, frequency as "weekly" | "biweekly" | "monthly"))).orderBy(employeesTable.name);
   if (!employees.length) { res.status(409).json({ error: "There are no employees with this pay frequency." }); return; }
   const missingWallets = employees.filter((employee) => !employee.walletAddress?.trim());

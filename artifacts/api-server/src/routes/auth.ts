@@ -114,7 +114,7 @@ router.get("/auth/employee-invitation/:token", (async (req, res) => {
     if (!row) { res.status(410).json({ error: "This employee invitation has expired or has already been used." }); return; }
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Cache-Control", "no-store");
-    res.json({ email: row.employee.email, employeeName: row.employee.name, position: row.employee.position, workspaceName: row.workspaceName, alreadyLinked: Boolean(row.employee.userId), payoutProfileCompleted: row.employee.payoutProfileCompleted });
+    res.json({ email: row.employee.email, employeeName: row.employee.name, position: row.employee.position, workspaceId: row.employee.workspaceId, workspaceName: row.workspaceName, alreadyLinked: Boolean(row.employee.userId), payoutProfileCompleted: row.employee.payoutProfileCompleted });
   } catch {
     res.status(410).json({ error: "This employee invitation is invalid or has expired. Ask the business to send a new one." });
   }

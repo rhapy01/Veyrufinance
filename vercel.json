@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm --filter @workspace/api-server build && pnpm --filter @workspace/trezu build",
+  "outputDirectory": "artifacts/trezu/dist/public",
+  "rewrites": [
+    { "source": "/api", "destination": "/api?__veyraroute=" },
+    { "source": "/api/:path*", "destination": "/api?__veyraroute=:path*" },
+    { "source": "/((?!api(?:/|$)).*)", "destination": "/index.html" }
+  ]
+}

@@ -6,13 +6,13 @@ import { setAuthTokenGetter, setWorkspaceIdGetter } from '@workspace/api-client-
 import {
   ArrowDownRight, ArrowLeftRight, ArrowRight, ArrowUpRight, BadgeCheck, BriefcaseBusiness,
   Check, ChevronDown, CircleHelp, Coins, Copy, FilePlus2, FileText, Globe2, Layers3,
-  LockKeyhole, Menu, MoveUpRight, Plus, RefreshCw, Search, Send, ShieldCheck, SlidersHorizontal, Sparkles, Star,
+  LockKeyhole, Menu, Plus, RefreshCw, Search, Send, ShieldCheck, SlidersHorizontal,
   Download, ExternalLink, Upload, Users, Wallet, X, Trash2,
 } from 'lucide-react';
 import {
   getGetAllocationsQueryKey, getGetDashboardQueryKey, getGetEmployeesQueryKey,
   getGetInvoicesQueryKey, getGetProfileQueryKey, getGetRecordsQueryKey,
-  getGetVendorsQueryKey, useCreateVendorApplication,
+  getGetVendorsQueryKey, useCreateVendorApplication, useListWorkspaces,
   useCreateWorkspace, useGetAllocations, useGetDashboard, useGetEmployees, useGetInvoices,
   useGetProfile, useGetRecords, useGetVendors, useUpdateAllocations,
 } from '@workspace/api-client-react';
@@ -49,7 +49,7 @@ function requestFreelancerTour() { window.dispatchEvent(new Event('trezu:freelan
 
 type FreelancerTourStep = { route: string; target: string; title: string; text: string; next: string; action?: 'open-invoice' | 'close-invoice' | 'open-invoice-and-finish' };
 const freelancerTourSteps: FreelancerTourStep[] = [
-  { route: '/app', target: '.overview-banner', title: 'Your financial home', text: 'This is your overview. We will walk through how to record client work, prepare a payment link, and check settlement.', next: 'Show me invoices' },
+  { route: '/app', target: '.overview-welcome', title: 'Your financial home', text: 'This is your overview. We will walk through how to record client work, prepare a payment link, and check settlement.', next: 'Show me invoices' },
   { route: '/app/invoices', target: '[data-testid="button-new-invoice"]', title: 'Start with an invoice', text: 'Add the work, amount, settlement asset, and your receiving address. Then send it to the recipient’s registered Veyra email.', next: 'Open the invoice form', action: 'open-invoice' },
   { route: '/app/invoices', target: '.modal-card', title: 'Add your work and receiving details', text: 'Enter the client and line items, then choose your testnet settlement asset and receiving wallet address. One submit creates both the invoice and checkout link; it does not email the client or move funds.', next: 'Show me payment records', action: 'close-invoice' },
   { route: '/app/records', target: '.page-heading', title: 'Follow what actually happened', text: 'Records show what Veyra has saved. An invoice only becomes paid after the payment provider confirms settlement. Quotes and drafts are not payments.', next: 'Back to my first invoice' },
@@ -127,8 +127,15 @@ function AuthProvider({ children }: { children: ReactNode }) {
       }, 20000);
       void (async () => {
         try {
-          const privyAccessToken = privy.privyAccessToken || await privy.privyGetAccessToken();
-          if (!privyAccessToken) throw new Error('Privy authenticated this account but did not provide an app access token. Sign in again to continue.');
+          let privyAccessToken = privy.privyAccessToken || await privy.privyGetAccessToken();
+          // Privy's authenticated state can update just before its identity
+          // token is available. Give that token exchange a moment to finish.
+          for (let attempt = 0; !privyAccessToken && attempt < 12; attempt += 1) {
+            await new Promise((resolve) => window.setTimeout(resolve, 250));
+            if (cancelled) return;
+            privyAccessToken = await privy.privyGetAccessToken();
+          }
+          if (!privyAccessToken) throw new Error('Privy completed sign-in, but the session token is still being issued. Please try Continue with Privy again.');
           await syncPrivySession(privyAccessToken);
         } catch (error) {
           if (cancelled) return;
@@ -182,7 +189,7 @@ type PayrollCycleSummary = {
   paymentDate: string;
   status: string;
   totals: Record<string, string>;
-  items: { id: string; amount: string; currency: string; payoutAmount: string | null; payoutUsdPrice: string | null; status: string; stablecoin: string; network: string; walletAddress: string | null; providerReference: string | null; failureReason: string | null; employeeName: string; employeeEmail: string; paymentQuote: { paymentId: string; providerStatus: string; reconciliationStatus: string | null; quote: Record<string, unknown> | null; statusCheckedAt: string | null; originAssetSymbol: string | null; originAssetNetwork: string | null } | null }[];
+  items: { id: string; amount: string; currency: string; payoutAmount: string | null; payoutUsdPrice: string | null; status: string; stablecoin: string; network: string; walletAddress: string | null; providerReference: string | null; failureReason: string | null; employeeName: string; employeeEmail: string; depositTxHash?: string | null; paymentQuote: { paymentId: string; providerStatus: string; reconciliationStatus: string | null; quote: Record<string, unknown> | null; statusCheckedAt: string | null; originAssetSymbol: string | null; originAssetNetwork: string | null } | null }[];
 };
 type PayrollAsset = { assetId: string; decimals: number; blockchain: string; symbol: string; price?: number; priceUpdatedAt?: string; contractAddress?: string | null };
 function payrollQuoteDetails(payload: Record<string, unknown> | null | undefined) {
@@ -214,20 +221,21 @@ function Brand({ light = false }: { light?: boolean }) {
 }
 
 function HomePage() {
+  const { user } = useAuth();
   return <main className="marketing">
     <header className="marketing-nav wrap">
       <Brand />
       <nav className="marketing-links" aria-label="Main navigation">
         <a href="#platform">Platform</a><a href="#principles">Why Veyra</a><a href="#trust">Trust</a>
       </nav>
-      <div className="nav-actions"><Link href="/create-invoice" className="text-link">Create an invoice</Link><Link href="/sign-in" className="text-link">Sign in</Link><Link href="/sign-up" className="button button-dark button-small">Open your workspace <ArrowRight size={15} /></Link></div>
+      <div className="nav-actions"><Link href="/create-invoice" className="text-link">Create an invoice</Link>{user ? <Link href="/app" className="button button-dark button-small">Go to workspace <ArrowRight size={15} /></Link> : <><Link href="/sign-in" className="text-link">Sign in</Link><Link href="/sign-up" className="button button-dark button-small">Open your workspace <ArrowRight size={15} /></Link></>}</div>
     </header>
     <section className="hero wrap">
       <div className="hero-copy">
         <div className="eyebrow"><span className="eyebrow-line" /> FINANCE, IN ONE PLACE</div>
         <h1>Pay across chains.<br /><em>Run your business.</em></h1>
         <p className="hero-sub">Veyra is the global payments and finance workspace for independent people and ambitious teams. Create invoices, pay people, and direct your funds with your own wallet.</p>
-        <div className="hero-ctas"><Link href="/create-invoice" className="button button-green">Create an invoice</Link><Link href="/sign-up" className="button button-outline">Open a workspace</Link></div>
+        <div className="hero-ctas"><Link href="/create-invoice" className="button button-green">Create an invoice</Link><Link href={user ? '/app' : '/sign-up'} className="button button-outline">{user ? 'Go to workspace' : 'Open a workspace'}</Link></div>
         <div className="hero-proof"><span>Clear records. No imagined balances.<br /><b>Built for financial clarity.</b></span></div>
       </div>
       <div className="hero-sidecard hero-sidecard-left">
@@ -271,12 +279,12 @@ function HomePage() {
       <div className="platform-grid">
         <article className="platform-feature feature-large"><div className="feature-top"><span className="feature-num">01 / DOCUMENTS</span><FileText size={20} /></div><div className="paper-stack"><div className="paper paper-back" /><div className="paper paper-front"><span className="paper-dot" /><span className="paper-line wide" /><span className="paper-line" /><span className="paper-total">USDC 2,840.00</span><span className="paper-foot">INVOICE · PAYMENT LINK</span></div></div><h3>Invoices, ready when you are.</h3><p>Create an invoice with or without a workspace. Recipients must have a Veyra account to receive it.</p><Link href="/create-invoice" className="feature-link">Create an invoice <ArrowRight size={15} /></Link></article>
         <article className="platform-feature feature-people"><div className="feature-top"><span className="feature-num">02 / PEOPLE</span><Users size={19} /></div><div className="people-graphic"><span className="person-chip chip-one">AM</span><span className="person-chip chip-two">JK</span><span className="person-chip chip-three">SN</span><span className="people-connect" /><span className="people-caption">Your people, your preferences</span></div><h3>Keep your team in view.</h3><p>Invite your team, save their payout preferences, and prepare pay runs when you’re ready.</p><Link href="/sign-up" className="feature-link">Explore the organization workspace <ArrowRight size={15} /></Link></article>
-         <article className="platform-feature feature-allocations"><div className="feature-top"><span className="feature-num">03 / PREFERENCES</span><SlidersHorizontal size={19} /></div><div className="allocation-mini"><span className="allocation-arc" /><div><strong>50 / 30 / 20</strong><small>Example allocation</small></div><span className="allocation-spark"><Sparkles size={17} /></span></div><h3>Plan with intention.</h3><p>Set tax, savings, and spending preferences. Your choices are saved as preferences only, not transfers.</p><Link href="/sign-up" className="feature-link">Set your preferences <ArrowRight size={15} /></Link></article>
+         <article className="platform-feature feature-allocations"><div className="feature-top"><span className="feature-num">03 / PREFERENCES</span><SlidersHorizontal size={19} /></div><div className="allocation-mini"><span className="allocation-arc" /><div><strong>50 / 30 / 20</strong><small>Example allocation</small></div></div><h3>Plan with intention.</h3><p>Set tax, savings, and spending preferences. Your choices are saved as preferences only, not transfers.</p><Link href="/sign-up" className="feature-link">Set your preferences <ArrowRight size={15} /></Link></article>
       </div>
     </section>
     <section className="statement-band" id="principles"><div className="wrap statement-inner"><div className="statement-index">OUR POINT OF VIEW <span>02 / 04</span></div><h2>Trust is not a badge.<br />It is <em>knowing what happened.</em></h2><p>Veyra distinguishes what is saved from what is settled. You will always know when something is a draft, a preference, or an actual record.</p></div></section>
       <section className="vendors-section wrap"><div className="vendor-copy"><div className="eyebrow"><span className="eyebrow-line" /> LOCAL EXCHANGE</div><h2>Local access,<br /><em>coming soon.</em></h2><p>Veyra is preparing a local exchange service. It is not available yet, and no trades or settlements happen through Veyra today.</p><span className="coming-soon-pill">Coming soon</span></div><div className="vendor-preview"><div className="vp-head"><div><span className="vp-kicker">VEYRA EXCHANGE</span><strong>In preparation</strong></div></div><div className="vp-list vp-list-empty"><b>Local exchange is coming soon</b><span>We will share more when the service is ready.</span></div><div className="vp-foot"><span>Not available yet</span></div></div></section>
-    <section className="closing-section"><div className="wrap closing-inner"><span className="closing-star"><Sparkles size={18} /></span><div><div className="eyebrow">MAKE SPACE FOR YOUR WORK</div><h2>Keep the money side<br /><em>in good order.</em></h2></div><Link href="/sign-up" className="button button-cream">Start with Veyra <ArrowRight size={16} /></Link><div className="closing-note">Share invoice links. Track verified settlement.<br />Keep your finances in one place.</div></div></section>
+    <section className="closing-section"><div className="wrap closing-inner"><div><div className="eyebrow">MAKE SPACE FOR YOUR WORK</div><h2>Keep the money side<br /><em>in good order.</em></h2></div><Link href="/sign-up" className="button button-cream">Start with Veyra <ArrowRight size={16} /></Link><div className="closing-note">Share invoice links. Track verified settlement.<br />Keep your finances in one place.</div></div></section>
       <footer className="marketing-footer wrap"><Brand /><span>Pay across chains. Run your business.</span><div><a href="#trust">Trust & clarity</a><Link href="/sign-in">Sign in</Link></div><small>© 2026 Veyra Finance</small></footer>
   </main>;
 }
@@ -473,10 +481,9 @@ function AppFrame({ children, title, eyebrow, action }: { children: ReactNode; t
       setWorkspaces(choices);
       const storedId = localStorage.getItem(ACTIVE_WORKSPACE_KEY);
       const storedWorkspace = choices.find((workspace) => workspace.id === storedId);
-      const organizationRoute = location === '/app/organization' || location.startsWith('/app/payroll');
-      const selected = (organizationRoute
-        ? storedWorkspace?.type === 'business' ? storedWorkspace : choices.find((workspace) => workspace.type === 'business')
-        : storedWorkspace?.role === 'employee' ? choices.find((workspace) => workspace.role !== 'employee') : storedWorkspace)
+      const selected = (storedWorkspace?.role === 'employee' && location !== '/app/organization'
+        ? choices.find((workspace) => workspace.role !== 'employee')
+        : storedWorkspace)
         || choices.find((workspace) => workspace.id === profile.data?.workspaceId)
         || choices[0];
       if (selected && selected.id !== storedId) {
@@ -488,6 +495,7 @@ function AppFrame({ children, title, eyebrow, action }: { children: ReactNode; t
     return () => { active = false; };
   }, [user?.id, profile.data?.workspaceId, location, queryClient]);
   const initials = user ? `${user.name.split(' ')[0]?.[0] ?? ''}${user.name.split(' ')[1]?.[0] ?? ''}`.toUpperCase() || user.email[0].toUpperCase() : 'T';
+  const personalProfileActive = location === '/app/account';
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId) || workspaces.find((workspace) => workspace.id === profile.data?.workspaceId);
   const chooseWorkspace = (workspace: WorkspaceChoice) => {
     localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspace.id);
@@ -496,34 +504,25 @@ function AppFrame({ children, title, eyebrow, action }: { children: ReactNode; t
     queryClient.clear();
     navigate(workspace.type === 'business' ? '/app/organization' : '/app');
   };
-  const enterOrganization = () => {
-    const organization = workspaces.find((workspace) => workspace.id === activeWorkspace?.id && workspace.type === 'business')
-      || workspaces.find((workspace) => workspace.type === 'business');
-    if (!organization) return;
-    localStorage.setItem(ACTIVE_WORKSPACE_KEY, organization.id);
-    setActiveWorkspaceId(organization.id);
-    setWorkspaceMenuOpen(false);
-    queryClient.clear();
-  };
   return <div className="app-shell">
-    <aside className={`app-sidebar ${open ? 'sidebar-open' : ''}`}>
-      <div className="sidebar-brand"><Brand light /><button className="mobile-close icon-button" onClick={() => setOpen(false)} aria-label="Close menu"><X size={18} /></button></div>
+    <aside id="app-sidebar" className={`app-sidebar ${open ? 'sidebar-open' : ''}`} aria-hidden={!open && window.matchMedia('(max-width: 760px)').matches}>
+      <div className="sidebar-brand"><Brand light /><button type="button" className="mobile-close icon-button" onClick={() => setOpen(false)} aria-label="Close menu"><X size={18} /></button></div>
       <div className="workspace-switcher">
         <button type="button" className="workspace-switch" onClick={() => setWorkspaceMenuOpen((value) => !value)} aria-expanded={workspaceMenuOpen} aria-label="Switch workspace">
-          <span className="workspace-avatar">{(activeWorkspace?.name || profile.data?.workspaceName || 'T').charAt(0).toUpperCase()}</span>
-          <span><b>{activeWorkspace?.name || profile.data?.workspaceName || 'Your workspace'}</b><small>{activeWorkspace ? `${activeWorkspace.type === 'business' ? 'Organization' : 'Personal'} · ${activeWorkspace.role}` : 'Financial home'}</small></span>
+          <span className="workspace-avatar">{personalProfileActive ? 'M' : (activeWorkspace?.name || profile.data?.workspaceName || 'T').charAt(0).toUpperCase()}</span>
+          <span><b>{personalProfileActive ? 'Mine' : activeWorkspace?.name || profile.data?.workspaceName || 'Your workspace'}</b><small>{personalProfileActive ? 'Personal profile' : activeWorkspace ? `${activeWorkspace.type === 'business' ? 'Organization' : 'Freelance'} · ${activeWorkspace.role}` : 'Financial home'}</small></span>
           <ChevronDown size={15} />
         </button>
-        {workspaceMenuOpen && workspaces.length > 1 && <div className="workspace-menu" role="menu" aria-label="Your workspaces">{workspaces.map((workspace) => <button type="button" role="menuitem" key={workspace.id} onClick={() => chooseWorkspace(workspace)} className={workspace.id === activeWorkspace?.id ? 'workspace-menu-active' : ''}><span><b>{workspace.name}</b><small>{workspace.type === 'business' ? 'Organization' : 'Personal'} · {workspace.role}</small></span>{workspace.id === activeWorkspace?.id && <Check size={16} />}</button>)}</div>}
+        {workspaceMenuOpen && <div className="workspace-menu" role="menu" aria-label="Your workspaces"><button type="button" role="menuitem" className={personalProfileActive ? 'workspace-menu-active' : ''} onClick={() => { setWorkspaceMenuOpen(false); setOpen(false); navigate('/app/account'); }}><span><b>Mine</b><small>Personal profile · wallets and settings</small></span>{personalProfileActive && <Check size={16} />}</button>{workspaces.map((workspace) => <button type="button" role="menuitem" key={workspace.id} onClick={() => chooseWorkspace(workspace)} className={!personalProfileActive && workspace.id === activeWorkspace?.id ? 'workspace-menu-active' : ''}><span><b>{workspace.name}</b><small>{workspace.type === 'business' ? 'Organization' : 'Freelance'} · {workspace.role}</small></span>{!personalProfileActive && workspace.id === activeWorkspace?.id && <Check size={16} />}</button>)}<button type="button" role="menuitem" className="workspace-menu-create" onClick={() => { setWorkspaceMenuOpen(false); setOpen(false); navigate('/app/organization/new'); }}><span><b>+ Create organization</b><small>Set up a team workspace</small></span><ArrowRight size={15} /></button></div>}
       </div>
       <nav className="side-nav" aria-label="Workspace navigation">
-        {['WORKSPACE', 'TREASURY', 'NETWORK', 'ADMIN'].map((section) => <div className="nav-section" key={section}>{navItems.filter((item) => { const managerOnly = ['/app/treasury', '/app/records'].includes(item.href); const canManage = profile.data?.role === 'owner' || profile.data?.role === 'admin'; const businessWorkspace = profile.data?.workspaceType === 'business'; const organizationAllowed = workspaces.some((workspace) => workspace.type === 'business'); return item.section === section && (item.href !== '/app/organization' || organizationAllowed) && (!managerOnly || (businessWorkspace && canManage)) && (section !== 'ADMIN' || profile.data?.role === 'platform_admin'); }).map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => { setOpen(false); if (href === '/app/organization') enterOrganization(); }} className={`side-link ${location === href ? 'side-link-active' : ''}`} data-testid={`link-nav-${label.toLowerCase().replaceAll(' ', '-')}`}><Icon size={17} strokeWidth={1.8} /><span>{label}</span>{href === '/app/records' && <span className="side-link-arrow"><ArrowUpRight size={13} /></span>}</Link>)}</div>)}
+        {['WORKSPACE', 'TREASURY', 'NETWORK', 'ADMIN'].map((section) => <div className="nav-section" key={section}>{navItems.filter((item) => { const managerOnly = ['/app/treasury', '/app/records'].includes(item.href); const canManage = profile.data?.role === 'owner' || profile.data?.role === 'admin'; const businessWorkspace = profile.data?.workspaceType === 'business'; const organizationAllowed = workspaces.some((workspace) => workspace.type === 'business'); return item.section === section && (item.href !== '/app/organization' || organizationAllowed) && (!managerOnly || (businessWorkspace && canManage)) && (section !== 'ADMIN' || profile.data?.role === 'platform_admin'); }).map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setOpen(false)} className={`side-link ${location === href ? 'side-link-active' : ''}`} data-testid={`link-nav-${label.toLowerCase().replaceAll(' ', '-')}`}><Icon size={17} strokeWidth={1.8} /><span>{label}</span>{href === '/app/records' && <span className="side-link-arrow"><ArrowUpRight size={13} /></span>}</Link>)}</div>)}
       </nav>
-      <div className="sidebar-bottom"><div className="side-help"><span className="help-icon"><CircleHelp size={17} /></span><div><b>Need a hand?</b><small>Clear answers, always.</small></div><ArrowUpRight size={14} /></div><button type="button" className="user-menu" onClick={() => signOut().then(() => navigate('/'))} data-testid="button-sign-out"><span className="user-initial">{initials}</span><span className="user-details"><b>{user?.name ?? 'Your account'}</b><small>{user?.email ?? 'Signed in'}</small></span><ArrowDownRight size={14} /></button></div>
+      <div className="sidebar-bottom"><button type="button" className="user-menu" onClick={() => signOut().then(() => navigate('/'))} data-testid="button-sign-out"><span className="user-initial">{initials}</span><span className="user-details"><b>{user?.name ?? 'Your account'}</b><small>{user?.email ?? 'Signed in'}</small></span><ArrowDownRight size={14} /></button></div>
     </aside>
-    {open && <button className="sidebar-scrim" onClick={() => setOpen(false)} aria-label="Close navigation" />}
+    {open && <button type="button" className="sidebar-scrim" onClick={() => setOpen(false)} aria-label="Close navigation" />}
     <section className="app-main">
-      <header className="app-topbar"><button className="mobile-menu icon-button" onClick={() => setOpen(true)} aria-label="Open menu"><Menu size={20} /></button><div className="topbar-breadcrumb"><span>Workspace</span><span className="breadcrumb-slash">/</span><b>{title}</b></div><div className="topbar-right"><span className="secure-label"><LockKeyhole size={13} /> Private workspace</span><Link href="/app/account" className="topbar-user" aria-label="Account and wallets">{initials}</Link></div></header>
+      <header className="app-topbar"><button type="button" className="mobile-menu icon-button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls="app-sidebar" aria-label={open ? 'Close menu' : 'Open menu'}><Menu size={20} /></button><div className="topbar-breadcrumb"><span>Workspace</span><span className="breadcrumb-slash">/</span><b>{title}</b></div><div className="topbar-right"><span className="secure-label"><LockKeyhole size={13} /> Private workspace</span><Link href="/app/account" className="topbar-user" aria-label="Account and wallets">{initials}</Link></div></header>
       <main className="page-content"><div className="page-heading"><div><span className="page-eyebrow">{eyebrow}</span><h1>{title}</h1></div>{action}</div>{children}<footer className="app-footer"><span>Veyra keeps a clear record of what is saved.</span><span>Need help? <b>We are here.</b></span></footer></main>
     </section>
     {tourStep !== null && <FreelancerTour stepIndex={tourStep} location={location} navigate={navigate} setStep={setTourStep} />}
@@ -582,27 +581,59 @@ function WorkspaceSetup() {
 
 function DashboardPage() {
   const dashboard = useGetDashboard({ query: { queryKey: getGetDashboardQueryKey() } });
+  const records = useGetRecords({ query: { queryKey: getGetRecordsQueryKey() } });
+  const [attention, setAttention] = useState<{ bills: number | null; payroll: number | null }>({ bills: null, payroll: null });
   useEffect(() => {
     if (dashboard.data?.workspaceType === 'freelancer' && !localStorage.getItem(FREELANCER_TOUR_DONE_KEY) && !sessionStorage.getItem(FREELANCER_TOUR_SESSION_KEY)) requestFreelancerTour();
   }, [dashboard.data?.workspaceType]);
+  useEffect(() => {
+    if (!dashboard.data) return;
+    let cancelled = false;
+    void (async () => {
+      const canManagePayroll = dashboard.data?.workspaceType === 'business' && ['owner', 'admin'].includes(dashboard.data.role);
+      const [invoiceResponse, payrollResponse] = await Promise.all([
+        apiFetch('/api/received-invoices').catch(() => null),
+        canManagePayroll ? apiFetch('/api/payroll/cycles').catch(() => null) : Promise.resolve(null),
+      ]);
+      let bills: number | null = null;
+      let payroll: number | null = canManagePayroll ? null : 0;
+      if (invoiceResponse?.ok) {
+        const body = await invoiceResponse.json().catch(() => ({}));
+        bills = ((body.invoices || []) as Array<{ status: string; amountDue?: string; amount?: string }>).filter((invoice) => !['paid', 'cancelled'].includes(invoice.status) && Number(invoice.amountDue ?? invoice.amount) > 0).length;
+      }
+      if (payrollResponse?.ok) {
+        const cycles = await payrollResponse.json().catch(() => []);
+        payroll = (cycles as PayrollCycleSummary[]).reduce((total, cycle) => total + cycle.items.filter((item) => item.status !== 'paid').length, 0);
+      }
+      if (!cancelled) setAttention({ bills, payroll });
+    })();
+    return () => { cancelled = true; };
+  }, [dashboard.data?.workspaceName, dashboard.data?.role, dashboard.data?.workspaceType]);
   if (dashboard.isLoading) return <AppFrame title="Overview" eyebrow="YOUR FINANCIAL HOME"><StatePanel kind="loading" title="Gathering your workspace" text="Your overview is getting ready." /><div className="skeleton-dashboard"><i /><i /><i /></div></AppFrame>;
   if (dashboard.isError || !dashboard.data) return <AppFrame title="Overview" eyebrow="YOUR FINANCIAL HOME"><StatePanel kind="error" title="Your overview is taking a moment" text="We could not load your workspace data." retry={() => dashboard.refetch()} /></AppFrame>;
   const data = dashboard.data;
+  const isFreelancer = data.workspaceType === 'freelancer';
+  const canManagePayroll = data.workspaceType === 'business' && ['owner', 'admin'].includes(data.role);
+  const recentRecords = (records.data || []).slice(0, 6);
   return <AppFrame title="Overview" eyebrow={`GOOD TO SEE YOU · ${data.workspaceName.toUpperCase()}`}>
     {data.workspaceType === 'freelancer' && <FreelancerStartGuide />}
-    <div className="overview-banner"><div className="overview-banner-copy"><span className="banner-kicker"><span className="banner-dot" /> YOUR WORKSPACE IS READY</span><h2>Good work deserves<br />a <em>clear home.</em></h2><p>Keep the moving parts of your work close at hand. Nothing moves without you.</p><Link href="/app/records" className="banner-link">See your financial records <ArrowRight size={15} /></Link></div><div className="overview-illustration"><div className="ring ring-outer" /><div className="ring ring-middle" /><div className="ring ring-inner" /><div className="ring-center"><span className="brand-mark"><span /><span /><span /></span></div><span className="ring-node node-left"><FileText size={15} /></span><span className="ring-node node-right"><Users size={15} /></span><span className="ring-node node-bottom"><Coins size={15} /></span></div><div className="banner-index">VEYRA / 001</div></div>
-    {data.workspaceType !== 'freelancer' && <div className="overview-stat-grid">
-      <StatCard label="Invoice drafts" value={String(data.invoiceCount)} note="Saved for later" icon={<FileText size={17} />} href="/app/invoices" color="green" />
-      <StatCard label="Team members" value={String(data.employeeCount)} note="People and payout setup" icon={<Users size={17} />} href="/app/payroll" color="gold" />
-      <StatCard label="Vendor applications" value={String(data.pendingVendorApplications)} note="Awaiting review" icon={<Globe2 size={17} />} href="/app/exchange" color="blue" />
-      <div className="stat-card balance-card"><div className="stat-top"><span className="stat-icon icon-soft-green"><Wallet size={17} /></span><span className="stat-note">WALLET ACCESS</span></div><div className="balance-value">Your wallet</div><div className="stat-caption"><Link href="/app/wallets" className="text-link">View addresses and balances <ArrowRight size={13} /></Link></div></div>
-    </div>}
-    <div className="overview-lower"><section className="quick-panel"><div className="panel-heading"><div><span className="page-eyebrow">{data.workspaceType === 'freelancer' ? 'FOR YOUR FREELANCE WORK' : 'A FEW GOOD NEXT STEPS'}</span><h2>{data.workspaceType === 'freelancer' ? 'Your money, more organized.' : 'Pick up where you need.'}</h2></div><span className="panel-ornament"><MoveUpRight size={15} /></span></div><div className="quick-list">{data.workspaceType === 'freelancer' ? <><QuickLink href="/app/invoices" num="01" icon={<FilePlus2 size={17} />} title="Create an invoice" text="Record client, services, amount, and due date." /><QuickLink href="/app/records" num="02" icon={<BriefcaseBusiness size={17} />} title="Review financial records" text="See saved invoices and confirmed payments." /><QuickLink href="/app/treasury" num="03" icon={<SlidersHorizontal size={17} />} title="Plan your treasury" text="Set how to allocate money received in your wallets." /></> : <><QuickLink href="/app/invoices" num="01" icon={<FilePlus2 size={17} />} title="Create and send an invoice" text="Choose the recipient, receiving wallet, and settlement asset." /><QuickLink href="/app/payables" num="02" icon={<FileText size={17} />} title="Review what is due" text="See received supplier invoices and payroll payments together." /><QuickLink href="/app/payroll" num="03" icon={<Users size={17} />} title="Prepare payroll" text="Add your team, review a pay run, then approve each wallet deposit." /></>}</div></section><section className="integrity-panel"><div className="integrity-top"><span className="integrity-icon"><ShieldCheck size={18} /></span><span>THE VEYRA PROMISE</span></div><h3>Know where your money goes.</h3><p>Invoice payments are delivered to the receiving wallet saved on the invoice. Veyra records provider-confirmed settlement; it does not hold those funds. Businesses can use their wallet to pay invoices sent to their account and payroll prepared for their team, with wallet approval for each payment.</p><div className="integrity-divider" /><div className="integrity-status"><span className="integrity-pulse" /> Testnet only · each outgoing deposit needs wallet approval</div></section></div>
+    <section className="overview-welcome"><div><span className="page-eyebrow">{isFreelancer ? 'FREELANCE WORKSPACE' : data.role === 'employee' ? 'TEAM WORKSPACE' : 'ORGANIZATION WORKSPACE'}</span><h2>{isFreelancer ? 'What needs your attention?' : `Welcome to ${data.workspaceName}`}</h2><p>{isFreelancer ? 'Your invoices, payments, and treasury activity in one place.' : 'Your team’s invoices, payables, and activity in one place.'}</p></div><Link href="/app/wallets" className="button button-outline"><Wallet size={16} /> Wallets & balances</Link></section>
+    <div className="overview-action-grid">
+      <Link href="/app/invoices" className="overview-action-card"><span className="overview-action-icon"><FilePlus2 size={19} /></span><span><b>{isFreelancer ? 'Create an invoice' : 'Invoices'}</b><small>{isFreelancer ? 'Prepare and send a client invoice.' : 'Create, send, and review invoices.'}</small></span><ArrowRight size={16} /></Link>
+      <Link href="/app/payables" className="overview-action-card"><span className="overview-action-icon"><FileText size={19} /></span><span><b>Bills to pay</b><small>Review received invoices and payments due.</small></span><ArrowRight size={16} /></Link>
+      {!isFreelancer && ['owner', 'admin'].includes(data.role) && <Link href="/app/payroll" className="overview-action-card"><span className="overview-action-icon"><Users size={19} /></span><span><b>Organization payroll</b><small>Prepare a pay run and pay your team.</small></span><ArrowRight size={16} /></Link>}
+      {isFreelancer && <Link href="/app/treasury" className="overview-action-card"><span className="overview-action-icon"><SlidersHorizontal size={19} /></span><span><b>Treasury settings</b><small>Choose how to allocate funds you receive.</small></span><ArrowRight size={16} /></Link>}
+      {!isFreelancer && data.role === 'employee' && <Link href="/app/account" className="overview-action-card"><span className="overview-action-icon"><Wallet size={19} /></span><span><b>Your payout details</b><small>Review the wallet saved for team payments.</small></span><ArrowRight size={16} /></Link>}
+    </div>
+    <section className="overview-attention-card"><div className="overview-section-heading"><div><span className="page-eyebrow">OPEN ITEMS</span><h2>Needs attention</h2></div><Link href="/app/payables" className="text-link">Review bills <ArrowRight size={14} /></Link></div><div className="overview-attention-items"><Link href="/app/payables" className="overview-attention-item"><span className="overview-attention-count">{attention.bills ?? '—'}</span><span><b>Unpaid invoices</b><small>Invoices received by this account</small></span><ArrowRight size={15} /></Link>{canManagePayroll && <Link href="/app/payroll" className="overview-attention-item"><span className="overview-attention-count">{attention.payroll ?? '—'}</span><span><b>Unpaid team payments</b><small>Payments across your prepared pay runs</small></span><ArrowRight size={15} /></Link>}</div></section>
+    <div className="overview-activity-layout"><section className="overview-activity-card"><div className="overview-section-heading"><div><span className="page-eyebrow">LATEST UPDATES</span><h2>Recent activity</h2></div><Link href="/app/records" className="text-link">All records <ArrowRight size={14} /></Link></div>
+      {records.isLoading ? <StatePanel kind="loading" title="Loading activity" text="Recent workspace records are on their way." /> : records.isError ? <StatePanel kind="error" title="Activity did not load" text="Try again to load recent workspace records." retry={() => records.refetch()} /> : recentRecords.length ? <div className="overview-record-list">{recentRecords.map((record) => <Link key={record.id} href="/app/records" className="overview-record-row"><span className="overview-record-icon">{record.recordType === 'invoice' ? <FileText size={17} /> : record.recordType.startsWith('payroll') ? <Users size={17} /> : <Coins size={17} />}</span><span className="overview-record-main"><b>{record.title}</b><small>{recordTypeName(record.recordType)} · {formatDate(record.createdAt)}</small></span><span className={`status-pill ${record.status.toLowerCase().includes('confirm') || record.status.toLowerCase() === 'paid' ? 'status-paid' : record.status.toLowerCase().includes('pending') ? 'status-pending' : 'status-muted'}`}><span />{record.status}</span><ArrowRight size={14} /></Link>)}</div> : <div className="overview-activity-empty"><BriefcaseBusiness size={21} /><b>No activity yet</b><span>Invoices, confirmed payments, and team activity will appear here.</span><Link href="/app/invoices" className="button button-outline button-small">Create your first invoice</Link></div>}
+    </section><aside className="overview-context-card"><span className="page-eyebrow">WORKSPACE SNAPSHOT</span><h2>{data.workspaceName}</h2><dl><div><dt>Invoices created</dt><dd>{data.invoiceCount}</dd></div>{!isFreelancer && <div><dt>Active team members</dt><dd>{data.employeeCount}</dd></div>}<div><dt>Saved records</dt><dd>{records.data?.length ?? '—'}</dd></div></dl><Link href="/app/records" className="button button-outline">View financial records <ArrowRight size={15} /></Link><p>Wallet balances and addresses are available on the Wallets page. Balances shown there come from the selected test network.</p></aside></div>
   </AppFrame>;
 }
 
 function FreelancerStartGuide() {
-  return <div className="freelancer-tour-launcher"><span className="guide-icon"><Sparkles size={17} /></span><div><b>New to Veyra?</b><small>Take the guided tour through your first invoice.</small></div><button className="button button-outline button-small" onClick={requestFreelancerTour}>Start tour <ArrowRight size={14} /></button></div>;
+  return <div className="freelancer-tour-launcher"><span className="guide-icon"><CircleHelp size={17} /></span><div><b>New to Veyra?</b><small>Take the guided tour through your first invoice.</small></div><button className="button button-outline button-small" onClick={requestFreelancerTour}>Start tour <ArrowRight size={14} /></button></div>;
 }
 
 function FreelancerTour({ stepIndex, location, navigate, setStep }: { stepIndex: number; location: string; navigate: (to: string) => void; setStep: (step: number | null) => void }) {
@@ -613,11 +644,13 @@ function FreelancerTour({ stepIndex, location, navigate, setStep }: { stepIndex:
     if (location !== step.route) { navigate(step.route); return; }
     let attempts = 0;
     let frame = 0;
+    let retryTimer = 0;
     const findTarget = () => {
       const target = document.querySelector<HTMLElement>(step.target);
       if (!target) {
-        if (attempts++ < 40) frame = requestAnimationFrame(findTarget);
-        else setRect(null);
+        // Dashboard data and invoice dialogs can take longer to appear on
+        // mobile networks. Keep the tour card available while waiting.
+        if (attempts++ < 60) retryTimer = window.setTimeout(() => { frame = requestAnimationFrame(findTarget); }, 100);
         return;
       }
       target.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -632,7 +665,7 @@ function FreelancerTour({ stepIndex, location, navigate, setStep }: { stepIndex:
     };
     let cleanupPosition = () => {};
     frame = requestAnimationFrame(findTarget);
-    return () => { cancelAnimationFrame(frame); cleanupPosition(); };
+    return () => { cancelAnimationFrame(frame); window.clearTimeout(retryTimer); cleanupPosition(); };
   }, [location, navigate, step]);
 
   useEffect(() => {
@@ -655,7 +688,7 @@ function FreelancerTour({ stepIndex, location, navigate, setStep }: { stepIndex:
   return <>
     <div className="tour-click-catcher" aria-hidden="true" />
     {rect && <div className="tour-focus-frame" aria-hidden="true" style={{ top: rect.top - 7, left: rect.left - 7, width: rect.width + 14, height: rect.height + 14 }} />}
-    <section className={`tour-card ${rect ? 'tour-card-positioned' : ''}`} style={rect ? tourCardPosition(rect) : undefined} role="dialog" aria-modal="true" aria-labelledby="tour-title">
+    <section className={`tour-card ${rect ? 'tour-card-positioned' : 'tour-card-fallback'}`} style={rect ? tourCardPosition(rect) : undefined} role="dialog" aria-modal="true" aria-labelledby="tour-title">
       <div className="tour-progress"><span>FREELANCER TOUR</span><b>STEP {stepIndex + 1} OF {freelancerTourSteps.length}</b></div>
       <h2 id="tour-title">{step.title}</h2><p>{step.text}</p>
       <div className="tour-actions"><button className="text-button" onClick={() => setStep(null)}>Skip tour</button><button className="button button-green" onClick={advance}>{step.next} <ArrowRight size={15} /></button></div>
@@ -669,13 +702,6 @@ function tourCardPosition(rect: { top: number; left: number; width: number; heig
   const below = rect.top + rect.height + 20;
   const top = below + 190 < window.innerHeight ? below : Math.max(16, rect.top - 220);
   return { top, left, width };
-}
-
-function StatCard({ label, value, note, icon, href, color }: { label: string; value: string; note: string; icon: ReactNode; href: string; color: string }) {
-  return <Link href={href} className="stat-card" data-testid={`card-stat-${label.toLowerCase().replaceAll(' ', '-')}`}><div className="stat-top"><span className={`stat-icon icon-soft-${color}`}>{icon}</span><ArrowUpRight size={15} className="stat-arrow" /></div><div className="stat-value">{value}</div><div className="stat-label">{label}</div><div className="stat-caption">{note}</div></Link>;
-}
-function QuickLink({ href, num, icon, title, text }: { href: string; num: string; icon: ReactNode; title: string; text: string }) {
-  return <Link href={href} className="quick-row" data-testid={`link-next-step-${num}`}><span className="quick-num">{num}</span><span className="quick-icon">{icon}</span><span className="quick-text"><b>{title}</b><small>{text}</small></span><ArrowRight size={16} className="quick-arrow" /></Link>;
 }
 
 function Modal({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: ReactNode }) {
@@ -708,6 +734,7 @@ function InvoicesPage() {
   const [invoiceRecipient, setInvoiceRecipient] = useState('');
   const [useCustomInvoiceRecipient, setUseCustomInvoiceRecipient] = useState(false);
   const [privyNearAddress, setPrivyNearAddress] = useState('');
+  const [personalReceiveDefaults, setPersonalReceiveDefaults] = useState<{ near?: string; evm?: string }>({});
   const [invoiceCurrency, setInvoiceCurrency] = useState('USD');
   const [invoiceAssetsLoading, setInvoiceAssetsLoading] = useState(false);
   const [invoiceView, setInvoiceView] = useState<'created' | 'received'>(() => new URLSearchParams(window.location.search).get('tab') === 'received' ? 'received' : 'created');
@@ -736,7 +763,9 @@ function InvoicesPage() {
   }, [canManageInvoices, profile.data]);
   const compatibleInvoiceAssets = invoiceAssets.filter((asset) => asset.symbol.toUpperCase() === invoiceCurrency || (invoiceCurrency === 'USD' && ['USDC', 'USDT'].includes(asset.symbol.toUpperCase())));
   const selectedInvoiceAsset = invoiceAssets.find((asset) => asset.assetId === invoiceAssetId);
-  const defaultInvoiceRecipient = selectedInvoiceAsset?.blockchain.toLowerCase() === 'near' ? privyNearAddress : privy.privyAddress;
+  const defaultInvoiceRecipient = selectedInvoiceAsset?.blockchain.toLowerCase() === 'near'
+    ? personalReceiveDefaults.near || privyNearAddress
+    : personalReceiveDefaults.evm || privy.privyAddress;
   const loadReceivedInvoices = useCallback(async () => {
     setReceivedInvoicesLoading(true); setReceivedInvoicesError('');
     try {
@@ -761,6 +790,11 @@ function InvoicesPage() {
         apiFetch('/api/integrations/near-intents/assets'),
         apiFetch('/api/auth/wallets').catch(() => null),
       ]);
+      const preferenceResponse = await apiFetch('/api/personal-profile/preferences').catch(() => null);
+      if (preferenceResponse?.ok) {
+        const preferenceData = await preferenceResponse.json();
+        setPersonalReceiveDefaults(preferenceData.defaultReceiveAddresses || {});
+      }
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Supported testnet assets could not be loaded.');
       const assets = (result.assets || []) as { assetId: string; symbol: string; blockchain: string }[];
@@ -1072,14 +1106,15 @@ async function downloadPrivateFile(path: string, filename: string) {
 function formatDecimalAmount(currency: string, amount: string) {
   const [whole, fraction] = amount.split('.');
   const groupedWhole = BigInt(whole || '0').toLocaleString();
-  const visibleFraction = fraction ? fraction.padEnd(2, '0') : '00';
+  const visibleFraction = (fraction || '').slice(0, 6).replace(/0+$/, '').padEnd(2, '0');
   return `${currency} ${groupedWhole}.${visibleFraction}`;
 }
 
 function PayrollRoutePage() {
   const profile = useGetProfile({ query: { queryKey: getGetProfileQueryKey() } });
   if (profile.isLoading) return <AppFrame title="Organization" eyebrow="ORGANIZATION WORKSPACE"><StatePanel kind="loading" title="Checking workspace" text="Loading your organization team and pay tools." /></AppFrame>;
-  if (profile.data?.workspaceType !== 'business' || !['owner', 'admin'].includes(profile.data?.role || '')) return <AppFrame title="Organization" eyebrow="ORGANIZATION WORKSPACE"><EmptyState icon={<Users size={22} />} title="Organization tools are for business workspaces." text="Your account can still receive invoices. Team management and pay runs are available to business workspace owners and admins." action={<Link href="/app/invoices?tab=received" className="button button-green">View received invoices</Link>} /></AppFrame>;
+  if (profile.data?.workspaceType !== 'business') return <OrganizationDirectory nextPath="/app/payroll" />;
+  if (!['owner', 'admin'].includes(profile.data?.role || '')) return <AppFrame title="Organization" eyebrow="ORGANIZATION WORKSPACE"><EmptyState icon={<Users size={22} />} title="Payroll administration is for organization owners and admins." text="You can still receive invoices and review your own organization pay from the Organization page." action={<Link href="/app/organization" className="button button-green">Open organization</Link>} /></AppFrame>;
   return <PayrollPage organizationName={profile.data.workspaceName || 'Organization'} />;
 }
 
@@ -1088,7 +1123,47 @@ function OrganizationRoutePage() {
   if (profile.isLoading) return <AppFrame title="Organization" eyebrow="YOUR ORGANIZATION"><StatePanel kind="loading" title="Opening your organization" text="Loading your team workspace." /></AppFrame>;
   if (profile.data?.workspaceType === 'business' && profile.data.role === 'employee') return <EmployeePortalPage />;
   if (profile.data?.workspaceType === 'business' && ['owner', 'admin'].includes(profile.data.role || '')) return <PayrollPage organizationName={profile.data.workspaceName || 'Organization'} />;
-  return <AppFrame title="Organization" eyebrow="YOUR ORGANIZATION"><EmptyState icon={<Users size={22} />} title="No organization workspace is selected." text="Choose an organization from your workspace menu or accept an organization invitation." /></AppFrame>;
+  return <OrganizationDirectory nextPath="/app/organization" />;
+}
+
+function OrganizationDirectory({ nextPath }: { nextPath: string }) {
+  const memberships = useListWorkspaces();
+  const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
+  const organizations = (memberships.data?.workspaces || []).filter((workspace) => workspace.type === 'business');
+  const openOrganization = async (workspaceId: string) => {
+    localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspaceId);
+    await queryClient.invalidateQueries();
+    navigate(nextPath);
+  };
+
+  return <AppFrame title="Your organizations" eyebrow="ORGANIZATION WORKSPACES" action={<Link href="/app/organization/new" className="button button-green"><Plus size={15} /> Create organization</Link>}>
+    <div className="page-intro"><p>Each organization has its own team, invoices, pay runs, and records. Switch between them without changing your personal workspace.</p><span className="intro-stamp"><Users size={16} /> YOUR TEAMS</span></div>
+    {memberships.isLoading ? <StatePanel kind="loading" title="Finding your organizations" text="Loading the teams available to this account." /> : memberships.isError ? <StatePanel kind="error" title="Organizations could not load" text="Your memberships are safe. Try again." retry={() => void memberships.refetch()} /> : organizations.length === 0 ? <EmptyState icon={<Users size={22} />} title="Start an organization workspace." text="Create a team workspace for your business. Your personal workspace and its records will stay separate." action={<Link href="/app/organization/new" className="button button-green"><Plus size={15} /> Create organization</Link>} /> : <section className="organization-directory-list" aria-label="Organizations you belong to">{organizations.map((workspace) => <article className="organization-directory-card" key={workspace.id}><span className="organization-directory-icon"><Users size={19} /></span><div className="organization-directory-copy"><span className="page-eyebrow">ORGANIZATION · {workspace.role.toUpperCase()}</span><h2>{workspace.name}</h2><p>{workspace.role === 'employee' ? 'Team membership and your pay information' : 'Team, invoices, payroll, and financial records'}</p></div><button type="button" className="button button-outline" onClick={() => void openOrganization(workspace.id)}>Open workspace <ArrowRight size={15} /></button></article>)}</section>}
+    <p className="organization-directory-footnote">Your personal workspace remains available from the workspace switcher.</p>
+  </AppFrame>;
+}
+
+function CreateOrganizationPage() {
+  const create = useCreateWorkspace();
+  const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
+  const [name, setName] = useState('');
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    create.mutate({ data: { name: name.trim(), type: 'business' } }, {
+      onSuccess: async (workspace) => {
+        if (!workspace.workspaceId) return;
+        localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspace.workspaceId);
+        await queryClient.invalidateQueries();
+        navigate('/app/organization');
+      },
+    });
+  };
+
+  return <AppFrame title="Create organization" eyebrow="NEW TEAM WORKSPACE">
+    <div className="organization-create-layout"><section className="panel-card organization-create-card"><span className="organization-create-icon"><Users size={22} /></span><span className="page-eyebrow">YOUR TEAM, IN ITS OWN SPACE</span><h2>Set up your organization.</h2><p>Invite people, keep organization invoices together, and prepare team pay runs from this workspace.</p><form className="form-stack" onSubmit={submit}><label>Organization name<input required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Ada Studio" autoFocus /></label>{create.isError && <p className="form-error" role="alert">{create.error instanceof Error ? create.error.message : 'The organization workspace could not be created. Try again.'}</p>}<div className="form-actions"><Link href="/app" className="button button-outline">Cancel</Link><button className="button button-green" disabled={create.isPending}>{create.isPending ? 'Creating…' : 'Create organization'} <ArrowRight size={15} /></button></div></form></section><aside className="organization-create-note"><span className="page-eyebrow">YOUR WORKSPACES STAY SEPARATE</span><h3>Your personal workspace remains yours.</h3><p>Creating an organization gives it a separate team, role access, invoices, and payroll. You can switch between this organization and your personal workspace at any time.</p></aside></div>
+  </AppFrame>;
 }
 
 type EmployeeRosterRecord = {
@@ -1172,6 +1247,8 @@ function PayrollPage({ organizationName }: { organizationName: string }) {
     } finally { setPayoutBusy(false); }
   };
   const [employeeToEdit, setEmployeeToEdit] = useState<(EmployeeRosterRecord & { id: string; payrollEnabled?: boolean; payoutProfileCompleted?: boolean; userId?: string | null }) | null>(null);
+  const [employeeSaveBusy, setEmployeeSaveBusy] = useState(false);
+  const [employeeSaveError, setEmployeeSaveError] = useState('');
   const payrollReadyCount = (list.data as (EmployeeRosterRecord & { payrollEnabled?: boolean; payoutProfileCompleted?: boolean })[] | undefined)?.filter((person) => person.payrollEnabled && person.payoutProfileCompleted).length || 0;
   const duplicateCycle = payrollCycles.some((cycle) => cycle.frequency === cycleFrequency && cycle.periodStart === cycleStart && cycle.periodEnd === cycleEnd && cycle.paymentDate === cyclePayDate);
   const loadCycles = async () => { try { const response = await apiFetch('/api/payroll/cycles', { credentials: 'include' }); if (!response.ok) throw new Error(); setPayrollCycles(await response.json()); } catch { setNotice('Payroll cycle history could not be loaded.'); } };
@@ -1259,12 +1336,28 @@ function PayrollPage({ organizationName }: { organizationName: string }) {
     catch (error) { setNotice(error instanceof Error ? error.message : 'This draft could not be discarded.'); }
     finally { setCycleBusy(false); }
   };
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); if (!employeeToEdit) return; const f = new FormData(event.currentTarget);
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); if (!employeeToEdit || employeeSaveBusy) return; const f = new FormData(event.currentTarget);
     const data = { employeeId: employeeToEdit.id, compensationAmount: String(f.get('amount')).trim(), compensationCurrency: String(f.get('currency')).toUpperCase(), payFrequency: String(f.get('frequency')) };
     const path = employeeToEdit.payrollEnabled ? `/api/employees/${employeeToEdit.id}` : '/api/employees';
     const method = employeeToEdit.payrollEnabled ? 'PATCH' : 'POST';
-    void apiFetch(path, { method, credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) }).then(async (response) => { const body = await response.json(); if (!response.ok) throw new Error(body.error || 'Payroll details could not be saved.'); qc.invalidateQueries({ queryKey: getGetEmployeesQueryKey() }); setModal(false); setEmployeeToEdit(null); setNotice(employeeToEdit.payrollEnabled ? 'Payroll compensation updated. Existing approved pay runs are unchanged.' : 'Team member added to payroll.'); }).catch((error) => setNotice(error instanceof Error ? error.message : 'Payroll details could not be saved.'));
+    setEmployeeSaveBusy(true); setEmployeeSaveError(''); setNotice('');
+    try {
+      const response = await apiFetch(path, { method, credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data), signal: AbortSignal.timeout(25_000) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || 'Payroll details could not be saved.');
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: getGetEmployeesQueryKey() }),
+        qc.invalidateQueries({ queryKey: getGetDashboardQueryKey() }),
+        qc.invalidateQueries({ queryKey: getGetRecordsQueryKey() }),
+      ]);
+      const employeeName = employeeToEdit.name;
+      const wasOnPayroll = employeeToEdit.payrollEnabled;
+      setModal(false); setEmployeeToEdit(null);
+      setNotice(wasOnPayroll ? `${employeeName}’s payroll details were updated. Approved pay runs were not changed.` : `${employeeName} was added to payroll. Their pay details are saved and they’ll appear in the next pay run.`);
+    } catch (error) {
+      setEmployeeSaveError(error instanceof Error ? error.message : 'Payroll details could not be saved. Please try again.');
+    } finally { setEmployeeSaveBusy(false); }
   };
   const removeEmployee = async (person: EmployeeRosterRecord & { id: string; name: string }) => {
     if (!window.confirm(`Remove ${person.name} from the employee list? Saved payroll history will remain.`)) return;
@@ -1296,14 +1389,14 @@ function PayrollPage({ organizationName }: { organizationName: string }) {
       <div className="payroll-workflow-steps"><article><span>1</span><div><b>Invite team members</b><small>Send an invitation to each person’s Veyra email.</small></div></article><article><span>2</span><div><b>They complete payout setup</b><small>They choose a supported payout asset and wallet in their account.</small></div></article><article><span>3</span><div><b>Add them to payroll</b><small>Set compensation and pay frequency after their payout profile is ready.</small></div></article><article><span>4</span><div><b>Prepare and pay a run</b><small>Review the pay run, approve it, and send from the business wallet.</small></div></article></div>
     </section>
     {notice && <div className="inline-notice notice-success"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Dismiss message"><X size={15} /></button></div>}
-    {list.isLoading ? <StatePanel kind="loading" title="Loading your team" text="Checking invitations and payout profiles." /> : list.isError ? <StatePanel kind="error" title="Team did not load" text="We could not reach your team records." retry={() => list.refetch()} /> : !list.data?.length ? <EmptyState icon={<Users size={22} />} title="Invite your first team member." text="They will join Veyra and save their payout details. You can add them to payroll once their profile is ready." action={<button className="button button-green" onClick={() => setInviteModal(true)}><Plus size={16} /> Invite team member</button>} /> : <div className="table-wrap"><table><thead><tr><th>TEAM MEMBER</th><th>PAYROLL STATUS</th><th>PAYOUT DESTINATION</th><th>PAY DETAILS</th><th>ACTION</th></tr></thead><tbody>{(list.data as (EmployeeRosterRecord & { id: string; userId?: string | null; payoutProfileCompleted?: boolean; payrollEnabled?: boolean })[]).map((person) => <tr key={person.id} data-testid={`row-employee-${person.id}`}><td><div className="person-cell"><span className="person-initials">{person.name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()}</span><span><b className="cell-primary">{person.name}</b><small className="cell-secondary">{person.email}</small></span></div></td><td>{person.payrollEnabled ? <span className="status-pill status-success"><span />On payroll</span> : person.payoutProfileCompleted ? <span className="status-pill status-pending"><span />Ready to add</span> : person.userId ? <span className="status-pill status-pending"><span />Completing payout setup</span> : <span className="status-pill status-draft"><span />Invitation sent</span>}</td><td><div className="wallet-cell"><b>{person.preferredStablecoin}</b><small>{person.preferredNetwork}{person.walletAddress ? ` · ${shorten(person.walletAddress)}` : ' · Waiting for member'}</small></div></td><td>{person.payrollEnabled ? <><b>{formatDecimalAmount(person.compensationCurrency, person.compensationAmount)}</b><small className="cell-secondary">{person.payFrequency}</small></> : 'Not set'}</td><td><div className="payroll-profile-actions">{person.payoutProfileCompleted && !person.payrollEnabled ? <button className="button button-green button-small" onClick={() => { setEmployeeToEdit(person); setModal(true); }}>Add to payroll</button> : person.payrollEnabled ? <button className="button button-outline button-small" onClick={() => { setEmployeeToEdit(person); setModal(true); }}>Edit pay</button> : !person.userId ? <button className="button button-outline button-small" onClick={() => void resendInvitation(person)} disabled={inviteBusy === person.id}>{inviteBusy === person.id ? 'Sending…' : 'Resend invitation'}</button> : <span className="cell-secondary">Waiting for profile</span>}<button className="button button-outline button-small" onClick={() => void removeEmployee(person)}>Remove</button></div></td></tr>)}</tbody></table></div>}
+    {list.isLoading ? <StatePanel kind="loading" title="Loading your team" text="Checking invitations and payout profiles." /> : list.isError ? <StatePanel kind="error" title="Team did not load" text="We could not reach your team records." retry={() => list.refetch()} /> : !list.data?.length ? <EmptyState icon={<Users size={22} />} title="Invite your first team member." text="They will join Veyra and save their payout details. You can add them to payroll once their profile is ready." action={<button className="button button-green" onClick={() => setInviteModal(true)}><Plus size={16} /> Invite team member</button>} /> : <div className="table-wrap"><table><thead><tr><th>TEAM MEMBER</th><th>PAYROLL STATUS</th><th>PAYOUT DESTINATION</th><th>PAY DETAILS</th><th>ACTION</th></tr></thead><tbody>{(list.data as (EmployeeRosterRecord & { id: string; userId?: string | null; payoutProfileCompleted?: boolean; payrollEnabled?: boolean })[]).map((person) => <tr key={person.id} data-testid={`row-employee-${person.id}`}><td><div className="person-cell"><span className="person-initials">{person.name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()}</span><span><b className="cell-primary">{person.name}</b><small className="cell-secondary">{person.email}</small></span></div></td><td>{person.payrollEnabled ? <span className="status-pill status-success"><span />On payroll</span> : person.payoutProfileCompleted ? <span className="status-pill status-pending"><span />Ready to add</span> : person.userId ? <span className="status-pill status-pending"><span />Completing payout setup</span> : <span className="status-pill status-draft"><span />Invitation sent</span>}</td><td><div className="wallet-cell"><b>{person.preferredStablecoin}</b><small>{person.preferredNetwork}{person.walletAddress ? ` · ${shorten(person.walletAddress)}` : ' · Waiting for member'}</small></div></td><td>{person.payrollEnabled ? <><b>{formatDecimalAmount(person.compensationCurrency, person.compensationAmount)}</b><small className="cell-secondary">{person.payFrequency}</small></> : 'Not set'}</td><td><div className="payroll-profile-actions">{person.payoutProfileCompleted && !person.payrollEnabled ? <button className="button button-green button-small" onClick={() => { setEmployeeSaveError(''); setEmployeeToEdit(person); setModal(true); }}>Add to payroll</button> : person.payrollEnabled ? <button className="button button-outline button-small" onClick={() => { setEmployeeSaveError(''); setEmployeeToEdit(person); setModal(true); }}>Edit pay</button> : !person.userId ? <button className="button button-outline button-small" onClick={() => void resendInvitation(person)} disabled={inviteBusy === person.id}>{inviteBusy === person.id ? 'Sending…' : 'Resend invitation'}</button> : <span className="cell-secondary">Waiting for profile</span>}<button className="button button-outline button-small" onClick={() => void removeEmployee(person)}>Remove</button></div></td></tr>)}</tbody></table></div>}
     <section className="panel-card payroll-cycle-panel"><div className="panel-heading"><div><span className="page-eyebrow">ORGANIZATION PAY RUN</span><h2>Prepare and pay your team</h2><p>Choose the period, review every person and payout, then start the whole run from your wallet.</p></div></div><div className="payroll-cycle-form"><label>Pay frequency<select value={cycleFrequency} onChange={(event) => setCycleFrequency(event.target.value as typeof cycleFrequency)}><option value="weekly">Weekly</option><option value="biweekly">Biweekly</option><option value="monthly">Monthly</option></select></label><label>Period starts<input type="date" value={cycleStart} onChange={(event) => setCycleStart(event.target.value)} /></label><label>Period ends<input type="date" value={cycleEnd} onChange={(event) => setCycleEnd(event.target.value)} /></label><label>Planned pay date<input type="date" value={cyclePayDate} onChange={(event) => setCyclePayDate(event.target.value)} /></label><button className="button button-green" onClick={() => void prepareCycle()} disabled={cycleBusy || payrollReadyCount === 0 || duplicateCycle}>{duplicateCycle ? 'Pay run already exists' : cycleBusy ? 'Preparing…' : 'Create pay run'} <ArrowRight size={15} /></button></div>{duplicateCycle && <p className="form-footnote">A pay run already exists for this frequency and period. Open it below to refresh, review, or discard it.</p>}{payrollReadyCount === 0 && <p className="form-footnote">Add a team member with a completed payout profile to start a pay run.</p>}
-      {payrollCycles.length > 0 && <div className="payroll-cycle-list">{payrollCycles.map((cycle) => { const paid = cycle.items.filter((item) => item.status === 'paid').length; const failed = cycle.items.filter((item) => item.status === 'failed').length; const pending = cycle.items.length - paid - failed; const duplicatePeriod = payrollCycles.some((other) => other.id !== cycle.id && other.frequency === cycle.frequency && other.periodStart === cycle.periodStart && other.periodEnd === cycle.periodEnd && other.paymentDate === cycle.paymentDate); const needsQuote = cycle.items.filter((item) => (item.status === 'queued' || item.status === 'failed') && !item.paymentQuote?.reconciliationStatus?.includes('unmatched')); const batchable = cycle.items.filter((item) => item.status === 'pending_settlement' && item.paymentQuote?.originAssetSymbol && item.paymentQuote?.originAssetNetwork && item.paymentQuote.reconciliationStatus !== 'unmatched_payroll'); const firstBatch = batchable[0]; const sameAssetBatch = firstBatch ? batchable.filter((item) => item.paymentQuote?.originAssetSymbol === firstBatch.paymentQuote?.originAssetSymbol && item.paymentQuote?.originAssetNetwork === firstBatch.paymentQuote?.originAssetNetwork) : []; return <article className="payroll-cycle-card" id={`cycle-${cycle.id}`} key={cycle.id}><div className="payroll-cycle-row"><div><b>{cycle.frequency} pay run · {cycle.periodStart}–{cycle.periodEnd}</b><small>Pay date {cycle.paymentDate} · {cycle.items.length} staff · {Object.entries(cycle.totals).map(([currency, amount]) => `${amount} ${currency}`).join(' · ')}</small><small className="payroll-cycle-counts">{paid} paid <span>·</span> {pending} awaiting payment <span>·</span> {failed} failed</small></div><span className={`status-pill ${['approved', 'processing', 'partially_failed'].includes(cycle.status) ? 'status-pending' : cycle.status === 'completed' ? 'status-paid' : cycle.status === 'failed' ? 'status-error' : 'status-draft'}`}><span />{cycle.status.replace(/_/g, ' ')}</span><div className="payroll-run-actions">{cycle.status === 'draft' && <><button className="button button-outline button-small" onClick={() => void refreshDraftCycle(cycle.id)} disabled={cycleBusy}>Refresh draft</button><button className="button button-outline button-small" onClick={() => void discardDraftCycle(cycle)} disabled={cycleBusy}>Discard draft</button><button className="button button-green button-small" onClick={() => void approveCycle(cycle.id)} disabled={cycleBusy}>Review & approve</button></>}{cycle.status !== 'draft' && needsQuote.length > 0 && <button className="button button-outline" onClick={() => void openBatchPayout(cycle)} disabled={payoutBusy || cycleBusy}>Prepare all payouts ({needsQuote.length})</button>}{sameAssetBatch.length > 0 && <button className="button button-green" onClick={() => void sendPayrollBatch(sameAssetBatch)} disabled={cycleBusy}>Pay all {sameAssetBatch.length} ready payments</button>}</div></div>{duplicatePeriod && <div className="payroll-run-duplicate">Another run exists for this exact period. Confirm you only approve one of them; discard any duplicate draft.</div>}<div className="payroll-run-next-step">{cycle.status === 'draft' ? 'Draft snapshot · Refresh draft to load current team pay settings before approval.' : needsQuote.length ? `Step 2 · Prepare provider quotes for ${needsQuote.length} ${needsQuote.length === 1 ? 'person' : 'people'} using one source asset.` : sameAssetBatch.length ? `Step 3 · ${sameAssetBatch.length} payments are ready from ${firstBatch?.paymentQuote?.originAssetSymbol} on ${firstBatch?.paymentQuote?.originAssetNetwork}.` : cycle.status === 'completed' ? 'All payments in this run are confirmed.' : 'Payments are being checked with the provider.'}</div><details className="payroll-items-details"><summary>Review staff and individual payment status</summary><div className="payroll-items-list">{cycle.items.map((item) => <PayrollPaymentItem key={item.id} cycleId={cycle.id} item={item} busy={cycleBusy || payoutBusy} onPrepare={openPayout} onCheck={checkPayout} />)}</div></details></article>; })}</div>}
+      {payrollCycles.length > 0 && <div className="payroll-cycle-list">{payrollCycles.map((cycle) => { const paid = cycle.items.filter((item) => item.status === 'paid').length; const failed = cycle.items.filter((item) => item.status === 'failed').length; const processingPayments = cycle.items.filter((item) => item.status === 'processing' || (!!item.depositTxHash && item.status !== 'paid' && item.status !== 'failed')).length; const pending = cycle.items.length - paid - failed - processingPayments; const duplicatePeriod = payrollCycles.some((other) => other.id !== cycle.id && other.frequency === cycle.frequency && other.periodStart === cycle.periodStart && other.periodEnd === cycle.periodEnd && other.paymentDate === cycle.paymentDate); const needsQuote = cycle.items.filter((item) => (item.status === 'queued' || item.status === 'failed') && !item.paymentQuote?.reconciliationStatus?.includes('unmatched')); const batchable = cycle.items.filter((item) => item.status === 'pending_settlement' && !item.depositTxHash && item.paymentQuote?.originAssetSymbol && item.paymentQuote?.originAssetNetwork && item.paymentQuote.reconciliationStatus !== 'unmatched_payroll'); const firstBatch = batchable[0]; const sameAssetBatch = firstBatch ? batchable.filter((item) => item.paymentQuote?.originAssetSymbol === firstBatch.paymentQuote?.originAssetSymbol && item.paymentQuote?.originAssetNetwork === firstBatch.paymentQuote?.originAssetNetwork) : []; return <article className="payroll-cycle-card" id={`cycle-${cycle.id}`} key={cycle.id}><div className="payroll-cycle-row"><div><b>{cycle.frequency} pay run · {cycle.periodStart}–{cycle.periodEnd}</b><small>Pay date {cycle.paymentDate} · {cycle.items.length} staff · {Object.entries(cycle.totals).map(([currency, amount]) => `${amount} ${currency}`).join(' · ')}</small><small className="payroll-cycle-counts">{paid} paid <span>·</span> {processingPayments} processing <span>·</span> {pending} awaiting payment <span>·</span> {failed} failed</small></div><span className={`status-pill ${['approved', 'processing', 'partially_failed'].includes(cycle.status) ? 'status-pending' : cycle.status === 'completed' ? 'status-paid' : cycle.status === 'failed' ? 'status-error' : 'status-draft'}`}><span />{cycle.status.replace(/_/g, ' ')}</span><div className="payroll-run-actions">{cycle.status === 'draft' && <><button className="button button-outline button-small" onClick={() => void refreshDraftCycle(cycle.id)} disabled={cycleBusy}>Refresh draft</button><button className="button button-outline button-small" onClick={() => void discardDraftCycle(cycle)} disabled={cycleBusy}>Discard draft</button><button className="button button-green button-small" onClick={() => void approveCycle(cycle.id)} disabled={cycleBusy}>Review & approve</button></>}{cycle.status !== 'draft' && needsQuote.length > 0 && <button className="button button-outline" onClick={() => void openBatchPayout(cycle)} disabled={payoutBusy || cycleBusy}>Prepare all payouts ({needsQuote.length})</button>}{sameAssetBatch.length > 0 && <button className="button button-green" onClick={() => void sendPayrollBatch(sameAssetBatch)} disabled={cycleBusy}>Pay all {sameAssetBatch.length} ready payments</button>}</div></div>{duplicatePeriod && <div className="payroll-run-duplicate">Another run exists for this exact period. Confirm you only approve one of them; discard any duplicate draft.</div>}<div className="payroll-run-next-step">{cycle.status === 'draft' ? 'Draft snapshot · Refresh draft to load current team pay settings before approval.' : needsQuote.length ? `Step 2 · Prepare provider quotes for ${needsQuote.length} ${needsQuote.length === 1 ? 'person' : 'people'} using one source asset.` : sameAssetBatch.length ? `Step 3 · ${sameAssetBatch.length} payments are ready from ${firstBatch?.paymentQuote?.originAssetSymbol} on ${firstBatch?.paymentQuote?.originAssetNetwork}.` : cycle.status === 'completed' ? 'All payments in this run are confirmed.' : 'Payments are being checked with the provider.'}</div><details className="payroll-items-details"><summary>Review staff and individual payment status</summary><div className="payroll-items-list">{cycle.items.map((item) => <PayrollPaymentItem key={item.id} cycleId={cycle.id} item={item} busy={cycleBusy || payoutBusy} onPrepare={openPayout} onCheck={checkPayout} />)}</div></details></article>; })}</div>}
     </section>
     <div className="honesty-note"><ShieldCheck size={18} /><span><b>Approval is not settlement.</b> Each employee payment is tracked independently. No payment is shown as paid until the settlement integration verifies it.</span></div>
     {batchTarget && <Modal title="Prepare the team’s payouts" subtitle="Veyra uses the organization owner’s Privy wallet for the chosen source asset. No wallet address needs to be entered." onClose={() => { if (!payoutBusy) setBatchTarget(null); }}><form className="form-stack" onSubmit={(event) => void prepareAllPayouts(event)}><div className="payroll-batch-summary"><b>{batchTarget.items.filter((item) => item.status === 'queued' || item.status === 'failed').length} staff payments to prepare</b><span>{Object.entries(batchTarget.totals).map(([currency, amount]) => `${currency} ${amount}`).join(' · ')}</span><small>The employee payout asset and destination are already saved in each team member’s profile.</small><div className="payroll-batch-owner-wallet"><span>Paying from the owner’s wallet</span><code>{payoutRefundTo ? shorten(payoutRefundTo) : payoutBusy ? 'Loading wallet…' : 'Wallet unavailable'}</code></div></div><label>Owner pays with<select required value={payoutSource} disabled={payoutBusy} onChange={(event) => void changeBatchSource(event.target.value)}>{payoutAssets.map((asset) => <option key={asset.assetId} value={asset.assetId}>{asset.symbol} · {asset.blockchain}</option>)}</select></label>{payoutError && <p className="form-error">{payoutError}</p>}<p className="form-footnote">Preparing quotes does not move funds. Pay all sends from this owner wallet; your wallet will ask you to approve the transactions.</p><div className="form-actions"><button type="button" className="button button-outline" onClick={() => setBatchTarget(null)} disabled={payoutBusy}>Cancel</button><button className="button button-green" disabled={payoutBusy || !payoutSource || !payoutRefundTo.trim()}>{payoutBusy ? 'Loading wallet or preparing quotes…' : 'Prepare all payouts'} <ArrowRight size={15} /></button></div></form></Modal>}
     {payoutTarget && <Modal title={`Prepare payout for ${payoutTarget.item.employeeName}`} subtitle="Use the organization owner’s Privy wallet as the payer. Veyra creates the route and the owner approves the transfer in that wallet." onClose={() => { if (!payoutBusy) setPayoutTarget(null); }}><form className="form-stack" onSubmit={(event) => void preparePayout(event)}><div className="payroll-payout-summary"><span>Approved salary<b>{formatDecimalAmount(payoutTarget.item.currency, payoutTarget.item.amount)}</b></span><span>Employee receives<b>{payoutTarget.item.stablecoin} · {payoutTarget.item.network}</b></span><span>Wallet<b>{payoutTarget.item.walletAddress ? shorten(payoutTarget.item.walletAddress) : 'Address missing'}</b></span></div><label>Owner pays with<select required value={payoutSource} disabled={payoutBusy} onChange={(event) => void changeBatchSource(event.target.value)}>{payoutAssets.filter((asset) => asset.symbol.toUpperCase() !== payoutTarget.item.stablecoin.toUpperCase() || asset.blockchain.toLowerCase() !== payoutTarget.item.network.toLowerCase()).map((asset) => <option key={asset.assetId} value={asset.assetId}>{asset.symbol} · {asset.blockchain}</option>)}</select></label><div className="payroll-batch-owner-wallet"><span>Paying from the owner’s wallet</span><code>{payoutRefundTo ? shorten(payoutRefundTo) : payoutBusy ? 'Loading wallet…' : 'Wallet unavailable'}</code></div>{payoutError && <p className="form-error">{payoutError}</p>}<p className="form-footnote">The quote locks the employee’s payout amount. Preparing it does not move funds; you approve the exact transfer from this owner wallet.</p><div className="form-actions"><button type="button" className="button button-outline" onClick={() => setPayoutTarget(null)} disabled={payoutBusy}>Cancel</button><button className="button button-green" disabled={payoutBusy || !payoutSource || !payoutRefundTo.trim()}>{payoutBusy ? 'Preparing signed quote…' : 'Prepare signed quote'} <ArrowRight size={15} /></button></div></form></Modal>}
-    {modal && employeeToEdit && <Modal title={employeeToEdit.payrollEnabled ? 'Edit payroll details' : 'Add team member to payroll'} subtitle={employeeToEdit.payrollEnabled ? 'Change this person’s compensation for future pay runs.' : 'Set compensation now that this team member has completed payout setup.'} onClose={() => { setModal(false); setEmployeeToEdit(null); }}><form className="form-stack" onSubmit={submit}><div className="payroll-payout-summary"><span>Team member<b>{employeeToEdit.name}</b></span><span>Receives<b>{employeeToEdit.preferredStablecoin} · {employeeToEdit.preferredNetwork}</b></span><span>Wallet<b>{employeeToEdit.walletAddress ? shorten(employeeToEdit.walletAddress) : 'Address not saved'}</b></span></div><div className="form-pair amount-pair"><label>Pay amount<input type="text" inputMode="decimal" name="amount" required pattern="(?:0|[1-9][0-9]{0,23})(?:\.[0-9]{1,6})?" placeholder="0.00" defaultValue={employeeToEdit.payrollEnabled ? employeeToEdit.compensationAmount : ''} /></label><label>Currency<input name="currency" required minLength={3} maxLength={3} defaultValue={employeeToEdit.payrollEnabled ? employeeToEdit.compensationCurrency : 'USD'} /></label></div><label>Pay frequency<select name="frequency" defaultValue={employeeToEdit.payrollEnabled ? employeeToEdit.payFrequency : 'monthly'}><option value="weekly">Weekly</option><option value="biweekly">Biweekly</option><option value="monthly">Monthly</option></select></label><div className="form-actions"><button type="button" className="button button-outline" onClick={() => { setModal(false); setEmployeeToEdit(null); }}>Cancel</button><button className="button button-green">{employeeToEdit.payrollEnabled ? 'Save pay details' : 'Add to payroll'} <ArrowRight size={15} /></button></div><p className="form-footnote">This only saves payroll details. No payment is made until you prepare and approve a pay run.</p></form></Modal>}
+    {modal && employeeToEdit && <Modal title={employeeToEdit.payrollEnabled ? 'Edit payroll details' : 'Add team member to payroll'} subtitle={employeeToEdit.payrollEnabled ? 'Change this person’s compensation for future pay runs.' : 'Set compensation now that this team member has completed payout setup.'} onClose={() => { if (!employeeSaveBusy) { setModal(false); setEmployeeToEdit(null); } }}><form className="form-stack" onSubmit={submit}><div className="payroll-payout-summary"><span>Team member<b>{employeeToEdit.name}</b></span><span>Receives<b>{employeeToEdit.preferredStablecoin} · {employeeToEdit.preferredNetwork}</b></span><span>Wallet<b>{employeeToEdit.walletAddress ? shorten(employeeToEdit.walletAddress) : 'Address not saved'}</b></span></div><div className="form-pair amount-pair"><label>Pay amount<input type="text" inputMode="decimal" name="amount" required pattern="(?:0|[1-9][0-9]{0,23})(?:\.[0-9]{1,6})?" placeholder="0.00" defaultValue={employeeToEdit.payrollEnabled ? employeeToEdit.compensationAmount : ''} /></label><label>Currency<input name="currency" required minLength={3} maxLength={3} defaultValue={employeeToEdit.payrollEnabled ? employeeToEdit.compensationCurrency : 'USD'} /></label></div><label>Pay frequency<select name="frequency" defaultValue={employeeToEdit.payrollEnabled ? employeeToEdit.payFrequency : 'monthly'}><option value="weekly">Weekly</option><option value="biweekly">Biweekly</option><option value="monthly">Monthly</option></select></label>{employeeSaveError && <p className="form-error" role="alert">{employeeSaveError}</p>}<div className="form-actions"><button type="button" className="button button-outline" disabled={employeeSaveBusy} onClick={() => { setModal(false); setEmployeeToEdit(null); }}>Cancel</button><button className="button button-green" disabled={employeeSaveBusy}>{employeeSaveBusy ? (employeeToEdit.payrollEnabled ? 'Saving pay details…' : 'Adding to payroll…') : (employeeToEdit.payrollEnabled ? 'Save pay details' : 'Add to payroll')} {!employeeSaveBusy && <ArrowRight size={15} />}</button></div><p className="form-footnote">This only saves payroll details. No payment is made until you prepare and approve a pay run.</p></form></Modal>}
     {inviteModal && <Modal title="Invite a team member" subtitle="Invite someone who already uses Veyra or a new teammate. Both join through their email invitation." onClose={() => setInviteModal(false)}><form className="form-stack" onSubmit={(event) => void inviteEmployee(event)}><label>Team member name<input name="name" required maxLength={160} placeholder="Full name" /></label><label>Email they use for Veyra, or will register with<input type="email" name="email" required placeholder="name@company.com" /></label>{notice && <p className="form-error">{notice}</p>}<div className="form-actions"><button type="button" className="button button-outline" onClick={() => setInviteModal(false)}>Cancel</button><button className="button button-green" disabled={inviteBusy === 'new'}>{inviteBusy === 'new' ? 'Sending invitation…' : 'Send invitation'} <ArrowRight size={15} /></button></div><p className="form-footnote">Existing users sign in with this email. New users create their Veyra account from the invitation. Then they choose where to receive pay; you set compensation and add them to payroll.</p></form></Modal>}
   </AppFrame>;
 }
@@ -1313,14 +1406,66 @@ type EmployeePayment = { id: string; amount: string; currency: string; payoutAmo
 
 function EmployeeInvitationPage({ token }: { token: string }) {
   const { user, signIn } = useAuth(); const privy = usePrivyWallet();
-  const [invite, setInvite] = useState<{ email: string; employeeName: string; position: string; workspaceName: string; alreadyLinked?: boolean; payoutProfileCompleted?: boolean } | null>(null);
+  const [invite, setInvite] = useState<{ email: string; employeeName: string; position: string; workspaceId: string; workspaceName: string; alreadyLinked?: boolean; payoutProfileCompleted?: boolean } | null>(null);
   const [assets, setAssets] = useState<PayrollAsset[]>([]); const [assetId, setAssetId] = useState(''); const [walletAddress, setWalletAddress] = useState('');
+  const [nearWalletAddress, setNearWalletAddress] = useState(''); const [personalReceiveDefaults, setPersonalReceiveDefaults] = useState<{ near?: string; evm?: string }>({});
   const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [addressEdited, setAddressEdited] = useState(false);
   useEffect(() => { let active = true; apiFetch('/api/auth/employee-invitation/' + encodeURIComponent(token)).then(async (response) => { const body = await response.json(); if (!response.ok) throw new Error(body.error || 'This invitation could not be loaded.'); if (active) setInvite(body); }).catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : 'This invitation could not be loaded.'); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, [token]);
-  useEffect(() => { if (!user) return; let active = true; Promise.all([apiFetch('/api/employee/supported-assets'), apiFetch('/api/auth/wallets')]).then(async ([assetResponse, walletResponse]) => { const [assetBody, walletBody] = await Promise.all([assetResponse.json(), walletResponse.json()]); if (!assetResponse.ok) throw new Error(assetBody.error || 'Payout assets could not be loaded.'); if (!walletResponse.ok) throw new Error(walletBody.error || 'Your Privy wallets could not be loaded.'); const available = assetBody.assets as PayrollAsset[]; const wallets = walletBody.wallets as { network: string; address: string; provider: string }[]; if (!active) return; setAssets(available); const preferred = available.find((asset) => asset.blockchain.toLowerCase() === 'near' && asset.symbol.toUpperCase() === 'USDC') || available.find((asset) => asset.blockchain.toLowerCase() === 'near') || available.find((asset) => asset.blockchain.toLowerCase() === 'base') || available[0]; if (preferred) { setAssetId((current) => current || preferred.assetId); const near = wallets.find((wallet) => wallet.network === 'near:testnet' && wallet.provider === 'privy')?.address; const address = preferred.blockchain.toLowerCase() === 'near' ? near : privy.privyAddress; if (address && !addressEdited) setWalletAddress(address); } }).catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : 'Payout details could not be loaded.'); }); return () => { active = false; }; }, [user, privy.privyAddress, addressEdited]);
-  useEffect(() => { if (!user || !assets.length || addressEdited) return; const selected = assets.find((asset) => asset.assetId === assetId); if (!selected) return; if (selected.blockchain.toLowerCase() !== 'near') { if (privy.privyAddress) setWalletAddress(privy.privyAddress); return; } apiFetch('/api/auth/wallets').then((response) => response.json()).then((body) => { const wallet = (body.wallets || []).find((item: { network: string; provider: string }) => item.network === 'near:testnet' && item.provider === 'privy'); if (wallet?.address) setWalletAddress(wallet.address); }).catch(() => {}); }, [assetId, assets, user, privy.privyAddress, addressEdited]);
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    void Promise.all([apiFetch('/api/employee/supported-assets'), apiFetch('/api/auth/wallets'), apiFetch('/api/personal-profile/preferences')]).then(async ([assetResponse, walletResponse, preferenceResponse]) => {
+      const [assetBody, walletBody, preferenceBody] = await Promise.all([assetResponse.json(), walletResponse.json(), preferenceResponse.json()]);
+      if (!assetResponse.ok) throw new Error(assetBody.error || 'Payout assets could not be loaded.');
+      if (!walletResponse.ok) throw new Error(walletBody.error || 'Your Privy wallets could not be loaded.');
+      if (!preferenceResponse.ok) throw new Error(preferenceBody.error || 'Your personal wallet settings could not be loaded.');
+      const available = assetBody.assets as PayrollAsset[];
+      const wallets = walletBody.wallets as { network: string; address: string; provider: string }[];
+      const near = wallets.find((wallet) => wallet.network === 'near:testnet' && wallet.provider === 'privy')?.address || '';
+      const defaults = preferenceBody.defaultReceiveAddresses || {};
+      if (!active) return;
+      setAssets(available); setNearWalletAddress(near); setPersonalReceiveDefaults(defaults);
+      const evmChain = (chain: string) => ['eth', 'ethereum', 'base', 'op', 'optimism', 'arb', 'arbitrum', 'pol', 'polygon', 'bsc', 'avax', 'avalanche'].includes(chain.toLowerCase());
+      const preferred = (defaults.near && available.find((asset) => asset.blockchain.toLowerCase() === 'near' && asset.symbol.toUpperCase() === 'USDC'))
+        || (defaults.evm && available.find((asset) => evmChain(asset.blockchain) && asset.symbol.toUpperCase() === 'USDC'))
+        || (privy.privyAddress && available.find((asset) => evmChain(asset.blockchain) && asset.symbol.toUpperCase() === 'USDC'))
+        || (near && available.find((asset) => asset.blockchain.toLowerCase() === 'near' && asset.symbol.toUpperCase() === 'USDC'))
+        || (privy.privyAddress && available.find((asset) => evmChain(asset.blockchain)))
+        || (near && available.find((asset) => asset.blockchain.toLowerCase() === 'near'));
+      if (preferred) setAssetId((current) => current || preferred.assetId);
+    }).catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : 'Payout details could not be loaded.'); });
+    return () => { active = false; };
+  }, [user, privy.privyAddress]);
+  useEffect(() => {
+    if (!user || !assets.length || addressEdited) return;
+    const selected = assets.find((asset) => asset.assetId === assetId);
+    if (!selected) return;
+    const network = selected.blockchain.toLowerCase();
+    const address = network === 'near' ? personalReceiveDefaults.near || nearWalletAddress
+      : ['eth', 'ethereum', 'base', 'op', 'optimism', 'arb', 'arbitrum', 'pol', 'polygon', 'bsc', 'avax', 'avalanche'].includes(network) ? personalReceiveDefaults.evm || privy.privyAddress : '';
+    setWalletAddress(address || '');
+  }, [assetId, assets, user, privy.privyAddress, addressEdited, nearWalletAddress, personalReceiveDefaults]);
   const [, navigate] = useLocation();
-  const completeProfile = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); setBusy(true); setError(''); try { const response = await apiFetch('/api/auth/employee-invitation/accept', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ invitationToken: token, completeProfile: true, assetId, walletAddress }) }); const body = await response.json(); if (!response.ok) throw new Error(body.error || 'Your team profile could not be completed.'); navigate('/app'); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Your team profile could not be completed.'); setBusy(false); } };
+  const completeProfile = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setBusy(true); setError('');
+    try {
+      const response = await apiFetch('/api/auth/employee-invitation/accept', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invitationToken: token, completeProfile: true, assetId, walletAddress }),
+        signal: AbortSignal.timeout(25_000),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || 'Your team profile could not be completed.');
+      if (body.workspaceId) localStorage.setItem(ACTIVE_WORKSPACE_KEY, body.workspaceId);
+      navigate('/app/organization');
+    } catch (cause) {
+      const timedOut = cause instanceof DOMException && cause.name === 'TimeoutError';
+      setError(timedOut
+        ? 'Saving is taking longer than expected. Reload this invitation to check whether it completed, then retry if it did not.'
+        : cause instanceof Error ? cause.message : 'Your team profile could not be completed.');
+      setBusy(false);
+    }
+  };
   const signInToJoin = async () => { setBusy(true); setError(''); try { await signIn('', ''); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Privy sign-in could not be opened.'); setBusy(false); } };
   const selected = assets.find((asset) => asset.assetId === assetId);
   return <main className="auth-page employee-invitation-page">
@@ -1336,10 +1481,10 @@ function EmployeeInvitationPage({ token }: { token: string }) {
           <span className="page-eyebrow">COMPLETE YOUR TEAM PROFILE</span>
           <h2>{invite.workspaceName}</h2>
           <p className="employee-invitation-recipient">Invitation for <b>{invite.email}</b></p>
-          {invite.alreadyLinked && invite.payoutProfileCompleted ? <><p>You have already joined this team and saved your payout details.</p>{user ? <Link href="/app/organization" className="button button-green">Open organization <ArrowRight size={15} /></Link> : <button className="button button-green" onClick={() => void signInToJoin()} disabled={busy || !privy.privyReady}>{busy ? 'Opening Privy…' : 'Sign in to Veyra'} <ArrowRight size={15} /></button>}</> : !user ? <><p>Already use Veyra? Sign in with this email. New to Veyra? Create your account with this email. Then choose where you want to receive pay.</p>{error && <p className="form-error">{error}</p>}<button className="button button-green" onClick={() => void signInToJoin()} disabled={busy || !privy.privyReady}>{busy ? 'Opening Privy…' : 'Continue with Privy'} <ArrowRight size={15} /></button></> : <form className="form-stack" onSubmit={(event) => void completeProfile(event)}>
+          {invite.alreadyLinked && invite.payoutProfileCompleted ? <><p>You have already joined this team and your Privy payout wallet is on file.</p>{user ? <button type="button" className="button button-green" onClick={() => { localStorage.setItem(ACTIVE_WORKSPACE_KEY, invite.workspaceId); navigate('/app/organization'); }}>Open {invite.workspaceName} <ArrowRight size={15} /></button> : <button className="button button-green" onClick={() => void signInToJoin()} disabled={busy || !privy.privyReady}>{busy ? 'Opening Privy…' : 'Sign in to Veyra'} <ArrowRight size={15} /></button>}</> : !user ? <><p>Already use Veyra? Sign in with this email. New to Veyra? Create your account with this email. Your Privy wallet will be used for payroll automatically.</p>{error && <p className="form-error">{error}</p>}<button className="button button-green" onClick={() => void signInToJoin()} disabled={busy || !privy.privyReady}>{busy ? 'Opening Privy…' : 'Continue with Privy'} <ArrowRight size={15} /></button></> : <form className="form-stack" onSubmit={(event) => void completeProfile(event)}>
             <label>Receive payroll as<select required value={assetId} onChange={(event) => { setAssetId(event.target.value); setAddressEdited(false); }}><option value="" disabled>Select a supported asset and network</option>{assets.map((asset) => <option key={asset.assetId} value={asset.assetId}>{asset.symbol} · {asset.blockchain} testnet</option>)}</select></label>
             <label>Payout wallet address<input className="employee-wallet-address" required value={walletAddress} onChange={(event) => { setWalletAddress(event.target.value); setAddressEdited(true); }} autoComplete="off" placeholder={selected?.blockchain.toLowerCase() === 'near' ? 'Your Privy NEAR testnet account' : 'Your Privy EVM wallet'} /></label>
-            <p className="form-footnote">Your Privy wallet is filled in when available. You can replace it with another address on the selected network.</p>
+            <p className="form-footnote">Your personal profile’s address or Privy wallet is filled in automatically for the selected network. You only need to change it if you want payroll sent somewhere else.</p>
             {error && <p className="form-error">{error}</p>}
             <button className="button button-green" disabled={busy || !assetId || !walletAddress.trim()}>{busy ? 'Saving payout profile…' : 'Join team and save payout profile'} <ArrowRight size={15} /></button>
           </form>}</> : <><span className="page-eyebrow">INVITATION UNAVAILABLE</span><h2>We couldn’t open this invitation.</h2><p>{error || 'Ask the organization owner to send you a new invitation.'}</p><Link href="/" className="button button-outline">Return to Veyra</Link></>}
@@ -1406,7 +1551,7 @@ function PayrollPaymentItem({ item, cycleId, busy, onPrepare, onCheck }: {
   const canPrepare = !isMismatch && item.status !== 'paid' && (item.status === 'queued' || item.status === 'failed');
   const canCheck = item.status === 'processing' || item.status === 'pending_settlement';
   const originNetwork = item.paymentQuote?.originAssetNetwork?.toLowerCase() || '';
-  const canWalletSend = Boolean(item.paymentQuote?.paymentId && item.paymentQuote.quote && item.status !== 'paid' && !isMismatch && (
+  const canWalletSend = Boolean(item.paymentQuote?.paymentId && item.paymentQuote.quote && !item.depositTxHash && item.status !== 'paid' && !isMismatch && (
     (originNetwork === 'near' && /^[a-z0-9._-]{2,64}$/.test(depositAddress)) ||
     (getEvmChainId(originNetwork) && /^0x[0-9a-f]{40}$/i.test(depositAddress))
   ) && /^\d+$/.test(String(details.amountIn || '')));
@@ -1433,13 +1578,13 @@ function PayrollPaymentItem({ item, cycleId, busy, onPrepare, onCheck }: {
   };
   return <div className="payroll-item-row payroll-item-detail" key={item.id}>
     <span><b>{item.employeeName}</b><small>{item.employeeEmail}</small>{item.failureReason && <small className="payroll-item-error">{item.failureReason}</small>}{item.providerReference && <small>Provider transaction: {item.providerReference}</small>}</span>
-    <span>{formatDecimalAmount(item.currency, item.amount)}<small>{item.payoutAmount ? `Payout: ${item.payoutAmount} ${item.stablecoin} · ${item.network}` : `${item.stablecoin} · ${item.network}`}</small>{item.payoutUsdPrice && <small>Provider price: USD {item.payoutUsdPrice} per token</small>}</span>
-    <span className={`status-pill ${item.status === 'paid' ? 'status-paid' : item.status === 'failed' ? 'status-error' : 'status-pending'}`}><span />{item.status.replace(/_/g, ' ')}</span>
+    <span><b>{formatDecimalAmount(item.currency, item.amount)}</b><small>{item.payoutAmount ? `Payout: ${formatDecimalAmount(item.stablecoin, item.payoutAmount)} · ${item.network}` : `${item.stablecoin} · ${item.network}`}</small>{item.payoutUsdPrice && <small>Provider price: {formatDecimalAmount('USD', item.payoutUsdPrice)} per token</small>}</span>
+    <span className={`status-pill ${item.status === 'paid' ? 'status-paid' : item.status === 'failed' ? 'status-error' : 'status-pending'}`}><span />{item.depositTxHash && item.status !== 'paid' ? 'submitted · processing' : item.status.replace(/_/g, ' ')}</span>
     {canPrepare && <button type="button" className="button button-outline button-small" onClick={() => onPrepare(cycleId, item)} disabled={busy}>{item.status === 'failed' ? 'Retry quote' : 'Prepare payout'}</button>}
     {canCheck && <button type="button" className="button button-outline button-small" onClick={() => onCheck(item)} disabled={busy}>{busy ? 'Checking…' : 'Check status'}</button>}
     {item.status === 'paid' && <button type="button" className="button button-outline button-small" onClick={() => void downloadPrivateFile(`/api/payroll/items/${item.id}/payslip`, `payslip-${item.employeeName.replace(/[^A-Za-z0-9_-]/g, '-')}.pdf`)}>Payslip PDF</button>}
     {isMismatch && <span className="payroll-item-error">Provider confirmed a mismatch. Do not retry this payout.</span>}
-    {depositAddress && item.status !== 'paid' && <div className="payroll-deposit-instructions"><b>Provider deposit instructions</b><span>Send {String(details.amountInFormatted || 'the quoted amount')} {sourceAsset} to this address. The provider will deliver exactly {item.payoutAmount || String(details.amountOutFormatted || item.amount)} {item.stablecoin} to the employee after settlement.</span><code>{depositAddress}</code>{depositMemo && <small>Required memo: <code>{depositMemo}</code></small>}{canWalletSend && <button type="button" className="button button-green button-small" onClick={() => void sendWithWallet()} disabled={busy || sending}><Wallet size={13} /> {sending ? 'Waiting for wallet approval…' : 'Send from business wallet'}</button>}<button type="button" className="button button-outline button-small" onClick={() => void navigator.clipboard.writeText(depositAddress)}><Copy size={13} /> Copy address</button>{sendError && <small className="payroll-item-error">{sendError}</small>}<small>Review and approve the exact transfer in your wallet. Veyra does not custody the deposit.</small></div>}
+    {depositAddress && item.status !== 'paid' && <div className="payroll-deposit-instructions"><b>Payment route</b><span>Send {details.amountInFormatted ? `${formatDecimalAmount('', String(details.amountInFormatted)).trim()} ${sourceAsset}` : `the exact quoted ${sourceAsset} amount shown in your wallet`} to the provider. It will deliver {item.payoutAmount ? formatDecimalAmount(item.stablecoin, item.payoutAmount) : formatDecimalAmount(item.stablecoin, String(details.amountOutFormatted || item.amount))} to {item.employeeName} after settlement.</span><code title={depositAddress}>{depositAddress}</code>{depositMemo && <small>Memo: <code>{depositMemo}</code></small>}{item.depositTxHash && item.status !== 'paid' && <small className="payroll-deposit-submitted">Transfer submitted. Veyra will not ask you to send it again while settlement is processing.</small>}{canWalletSend && <button type="button" className="button button-green button-small" onClick={() => void sendWithWallet()} disabled={busy || sending}><Wallet size={13} /> {sending ? 'Waiting for wallet approval…' : 'Send from business wallet'}</button>}<button type="button" className="button button-outline button-small" onClick={() => void navigator.clipboard.writeText(depositAddress)}><Copy size={13} /> Copy address</button>{sendError && <small className="payroll-item-error">{sendError}</small>}<small>Review and approve the exact amount in your wallet before signing. Veyra does not custody the deposit.</small></div>}
   </div>;
 }
 
@@ -2016,7 +2161,7 @@ function WalletsPage() {
     <section className="wallet-create-panel"><div><span className="page-eyebrow">AUTOMATIC WALLET ACCESS</span><h2>Your account wallets</h2><p>Your EVM wallet is provisioned through your Privy account. Previously saved NEAR addresses remain visible; Privy NEAR addresses appear here when provisioning is configured.</p>{privy.privyEnabled && !privy.privyReady && <p className="form-footnote" role="status">{privy.privyError ? `Privy startup error: ${privy.privyError}` : 'Loading your account wallets…'}</p>}</div><div className="wallet-create-actions">{!privy.privyEnabled && <span className="wallet-count" role="status">Privy is not configured for this app</span>}{privy.privyAuthenticated && <span className="wallet-count" role="status">{privy.privyAddress ? 'Embedded EVM wallet ready' : 'Creating your embedded EVM wallet…'}</span>}</div></section>
     <section className="wallet-directory"><div className="panel-heading"><div><span className="page-eyebrow">YOUR PERSONAL WALLETS</span><h2>Your wallets</h2><p>Embedded EVM wallets appear automatically. NEAR Testnet balances include native NEAR and Tidepool test tokens.</p></div><span className="wallet-count">{visibleWallets.length} {visibleWallets.length === 1 ? 'wallet' : 'wallets'}</span></div>
       {balanceError && <p className="wallet-balance-error" role="status">{balanceError}</p>}
-      {loading ? <StatePanel kind="loading" title="Loading your wallets" text="Your saved testnet addresses will appear here." /> : visibleWallets.length ? <div className="wallet-directory-list">{visibleWallets.map((wallet) => { const explorerUrl = explorer(wallet); const nearBalance = wallet.network === 'near:testnet' ? nearBalances[wallet.address.toLowerCase()] : undefined; return <article className="wallet-directory-row" key={wallet.id}><span className="wallet-directory-icon"><Wallet size={20} /></span><div className="wallet-directory-details"><strong>{wallet.isPrivy ? wallet.network === 'near:testnet' ? 'Privy NEAR wallet' : 'Privy EVM wallet' : networkName(wallet.network)}</strong><code>{wallet.address}</code><small>{wallet.isPrivy ? 'Managed by Privy' : `Added ${formatDate(wallet.createdAt)}`}</small>{wallet.network === 'near:testnet' && <div className="wallet-asset-balances"><span className="wallet-asset-balances-title">{balancesLoading ? 'Checking NEAR Testnet balances…' : 'NEAR TESTNET ASSETS'}</span>{nearBalance && <div className="wallet-asset-balance-grid"><div className="wallet-asset-balance"><small>NEAR</small><strong>{formatWalletUnits(nearBalance.nativeNear, 24)}</strong></div>{nearBalance.tokens.map((token) => <div className="wallet-asset-balance" key={token.assetId}><small>{token.symbol}</small><strong>{formatWalletUnits(token.balance, token.decimals)}</strong></div>)}</div>}{!balancesLoading && !nearBalance && <small>Balances haven’t loaded yet.</small>}</div>}</div><div className="wallet-directory-actions"><button type="button" className="button button-outline button-small" onClick={() => void copyAddress(wallet.address)}><Copy size={14} />{copied === wallet.address ? 'Copied' : 'Copy address'}</button>{explorerUrl && <a className="button button-outline button-small" href={explorerUrl} target="_blank" rel="noreferrer">View activity <ExternalLink size={13} /></a>}{!wallet.isPrivy && <button type="button" className="text-button" disabled={busy} onClick={() => void unlink(wallet)}>Remove</button>}</div></article>; })}</div> : <EmptyState icon={<Wallet size={22} />} title={privy.privyAuthenticated ? 'Creating your embedded EVM wallet…' : 'Your account wallets will appear here.'} text={privy.privyAuthenticated ? 'Privy is still provisioning the wallet for this account. It will appear here automatically.' : 'Your wallets are created with your Privy account and shown here automatically.'} />}
+      {loading ? <StatePanel kind="loading" title="Loading your wallets" text="Your saved testnet addresses will appear here." /> : visibleWallets.length ? <div className="wallet-directory-list">{visibleWallets.map((wallet) => { const explorerUrl = explorer(wallet); const nearBalance = wallet.network === 'near:testnet' ? nearBalances[wallet.address.toLowerCase()] : undefined; return <article className="wallet-directory-row" key={wallet.id}><div className="wallet-directory-details"><strong>{wallet.isPrivy ? wallet.network === 'near:testnet' ? 'Privy NEAR wallet' : 'Privy EVM wallet' : networkName(wallet.network)}</strong><code>{wallet.address}</code><small>{wallet.isPrivy ? 'Managed by Privy' : `Added ${formatDate(wallet.createdAt)}`}</small>{wallet.network === 'near:testnet' && <div className="wallet-asset-balances"><span className="wallet-asset-balances-title">{balancesLoading ? 'Checking NEAR Testnet balances…' : 'NEAR TESTNET ASSETS'}</span>{nearBalance && <div className="wallet-asset-balance-grid"><div className="wallet-asset-balance"><small>NEAR</small><strong>{formatWalletUnits(nearBalance.nativeNear, 24)}</strong></div>{nearBalance.tokens.map((token) => <div className="wallet-asset-balance" key={token.assetId}><small>{token.symbol}</small><strong>{formatWalletUnits(token.balance, token.decimals)}</strong></div>)}</div>}{!balancesLoading && !nearBalance && <small>Balances haven’t loaded yet.</small>}</div>}</div><div className="wallet-directory-actions"><button type="button" className="button button-outline button-small" onClick={() => void copyAddress(wallet.address)}><Copy size={14} />{copied === wallet.address ? 'Copied' : 'Copy address'}</button>{explorerUrl && <a className="button button-outline button-small" href={explorerUrl} target="_blank" rel="noreferrer">View activity <ExternalLink size={13} /></a>}{!wallet.isPrivy && <button type="button" className="text-button" disabled={busy} onClick={() => void unlink(wallet)}>Remove</button>}</div></article>; })}</div> : <EmptyState icon={<Wallet size={22} />} title={privy.privyAuthenticated ? 'Creating your embedded EVM wallet…' : 'Your account wallets will appear here.'} text={privy.privyAuthenticated ? 'Privy is still provisioning the wallet for this account. It will appear here automatically.' : 'Your wallets are created with your Privy account and shown here automatically.'} />}
     </section>
     <div className="honesty-note"><ShieldCheck size={18} /><span><b>You control the wallet.</b> Veyra stores the public address only. It cannot see private keys or move funds without wallet approval.</span></div>
   </AppFrame>;
@@ -2024,7 +2169,49 @@ function WalletsPage() {
 
 function AccountPage() {
   const { user } = useAuth();
-  return <AppFrame title="Your account" eyebrow="VEYRA ACCOUNT"><div className="account-security-card"><div><span className="page-eyebrow">VEYRA ACCOUNT</span><h2>{user?.name}</h2><p>{user?.email}</p><p className="form-footnote">Your account stores your Veyra profile and workspace records. Wallets provisioned through Privy are listed automatically.</p></div><span className="account-verified"><BadgeCheck size={16} /> Email verified</span></div><section className="wallet-link-section"><div className="section-heading"><div><span className="page-eyebrow">PAYMENT WALLETS</span><h2>Your wallets</h2></div></div><p className="form-footnote">View, copy, and open your saved testnet wallet addresses. You should not need to reconnect an existing wallet.</p><Link href="/app/wallets" className="button button-green"><Wallet size={15} /> View wallets</Link><div className="account-separation-note"><strong>Your approval stays with you</strong><p>Veyra stores public wallet addresses only. A payment still requires approval in your wallet.</p></div></section></AppFrame>;
+  const privy = usePrivyWallet();
+  const [nearAddress, setNearAddress] = useState('');
+  const [evmAddress, setEvmAddress] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  useEffect(() => {
+    let active = true;
+    void Promise.all([apiFetch('/api/auth/wallets'), apiFetch('/api/personal-profile/preferences')]).then(async ([walletResponse, preferenceResponse]) => {
+      const [walletBody, preferenceBody] = await Promise.all([walletResponse.json(), preferenceResponse.json()]);
+      if (!walletResponse.ok) throw new Error(walletBody.error || 'Your wallets could not be loaded.');
+      if (!preferenceResponse.ok) throw new Error(preferenceBody.error || 'Your personal settings could not be loaded.');
+      if (!active) return;
+      const nearWallet = (walletBody.wallets || []).find((wallet: LinkedWallet) => wallet.network === 'near:testnet' && wallet.provider === 'privy')?.address || '';
+      const saved = preferenceBody.defaultReceiveAddresses || {};
+      setNearAddress(saved.near || nearWallet);
+      setEvmAddress(saved.evm || privy.privyAddress || '');
+    }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : 'Your personal profile could not be loaded.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [privy.privyAddress]);
+  const save = async (event: FormEvent) => {
+    event.preventDefault(); setSaving(true); setError(''); setNotice('');
+    try {
+      const response = await apiFetch('/api/personal-profile/preferences', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ defaultReceiveAddresses: { near: nearAddress, evm: evmAddress } }) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Your profile settings could not be saved.');
+      setNotice('Your receiving wallet defaults are saved to your personal profile and will be used in future invoices across your workspaces.');
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Your profile settings could not be saved.'); }
+    finally { setSaving(false); }
+  };
+  return <AppFrame title="Personal profile" eyebrow="MINE · ACCOUNT-WIDE SETTINGS">
+    <div className="personal-profile-layout">
+      <section className="account-security-card personal-identity-card"><div><span className="page-eyebrow">YOUR VEYRA IDENTITY</span><h2>{user?.name}</h2><p>{user?.email}</p><p className="form-footnote">This profile belongs to you. It stays the same when you move between freelance work and organizations.</p></div><span className="account-verified"><BadgeCheck size={16} /> Signed in</span></section>
+      <form className="personal-profile-settings" onSubmit={save}><div className="section-heading"><div><span className="page-eyebrow">PAYMENT DEFAULTS</span><h2>Where should your invoices be paid?</h2><p>These are your personal receiving addresses. New invoices use the matching default; each invoice can still use a different address.</p></div></div>
+        {loading ? <StatePanel kind="loading" title="Loading your profile" text="Getting your wallet addresses and saved defaults." /> : <div className="personal-address-grid"><label>NEAR testnet receiving address<input value={nearAddress} onChange={(event) => setNearAddress(event.target.value)} maxLength={128} placeholder="Your Privy NEAR account" autoComplete="off" /><small>Used when an invoice settles to a NEAR testnet asset.</small></label><label>EVM receiving address<input value={evmAddress} onChange={(event) => setEvmAddress(event.target.value)} maxLength={42} placeholder="Your Privy EVM wallet" autoComplete="off" /><small>Used for supported EVM testnet assets, including Base Sepolia.</small></label></div>}
+        {error && <p className="form-error" role="alert">{error}</p>}{notice && <div className="inline-notice notice-success" role="status"><span>{notice}</span><button type="button" onClick={() => setNotice('')} aria-label="Dismiss message"><X size={15} /></button></div>}
+        <div className="personal-profile-actions"><button className="button button-green" disabled={loading || saving}>{saving ? 'Saving profile…' : 'Save personal settings'}</button><Link href="/app/wallets" className="button button-outline"><Wallet size={15} /> View wallets</Link></div>
+      </form>
+      <section className="account-separation-note"><strong>Your workspaces use these defaults</strong><p>Freelance invoices and organization workflows remain separate. Updating this profile only changes your personal receiving defaults; it does not alter an invoice already sent or a payment already approved.</p></section>
+    </div>
+  </AppFrame>;
 }
 
 function PageMetadata() {
@@ -2065,7 +2252,7 @@ function Routes() {
     <PageMetadata />
     <Switch>
       <Route path="/sign"><PrivyNearSignPage /></Route>
-      <Route path="/">{user ? <Redirect to="/app" /> : <HomePage />}</Route>
+      <Route path="/"><HomePage /></Route>
       <Route path="/verify-email"><VerifyEmailPage /></Route>
       <Route path="/forgot-password"><ForgotPasswordPage /></Route>
       <Route path="/reset-password"><ResetPasswordPage /></Route>
@@ -2078,6 +2265,7 @@ function Routes() {
       <Route path="/app/account"><Protected><AccountPage /></Protected></Route>
       <Route path="/app/wallets"><Protected><WalletsPage /></Protected></Route>
       <Route path="/app/employee"><Protected><Redirect to="/app" /></Protected></Route>
+      <Route path="/app/organization/new"><Protected><CreateOrganizationPage /></Protected></Route>
       <Route path="/app/organization"><Protected><OrganizationRoutePage /></Protected></Route>
       <Route path="/app/invoices"><Protected><InvoicesPage /></Protected></Route>
       <Route path="/app/invoices/:invoiceId">{(params: { invoiceId: string }) => <Protected><InvoiceDetailPage invoiceId={params.invoiceId} /></Protected>}</Route>

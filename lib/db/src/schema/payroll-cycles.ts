@@ -39,6 +39,7 @@ export const payrollItemsTable = pgTable("trezu_payroll_items", {
   network: text("network").notNull(),
   walletAddress: text("wallet_address"),
   paymentQuoteId: uuid("payment_quote_id"),
+  depositTxHash: text("deposit_tx_hash"),
   attemptNumber: integer("attempt_number").notNull().default(0),
   status: payrollItemStatusEnum("status").notNull().default("queued"),
   providerReference: text("provider_reference"),

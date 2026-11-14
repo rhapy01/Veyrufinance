@@ -153,7 +153,6 @@
 .allocation-arc { width: 68px; height: 68px; border: 10px solid var(--m-border); border-right-color: var(--m-gold); border-bottom-color: #3a7a9e; border-top-color: var(--m-green); border-radius: 50%; transform: rotate(-40deg); }
 .allocation-mini strong { display: block; font-size: 13px; font-weight: 700; font-family: var(--font-mono); color: var(--m-ink); }
 .allocation-mini small { display: block; margin-top: 4px; color: var(--m-muted); font-size: 8px; }
-.allocation-spark { position: absolute; top: 76px; right: 28px; color: var(--m-gold); }
 
 /* statement band — single dark section for contrast */
 .statement-band { background: linear-gradient(135deg, #0f2820 0%, #1a4a35 100%); color: #fff; }
@@ -196,8 +195,7 @@
 /* closing */
 .closing-section { color: var(--m-ink); background: linear-gradient(160deg, #edf9f4 0%, #e4f5ed 100%); position: relative; overflow: hidden; border-top: 1px solid rgba(26,122,94,.12); }
 .closing-section::after { content: ''; position: absolute; width: 500px; height: 500px; top: -250px; right: 5%; border: 1px solid rgba(26,122,94,.08); border-radius: 50%; pointer-events: none; }
-.closing-inner { min-height: 260px; display: grid; grid-template-columns: 60px 1fr auto; align-items: center; gap: 24px; position: relative; z-index: 1; }
-.closing-star { width: 46px; height: 46px; display: grid; place-items: center; border: 1.5px solid rgba(26,122,94,.25); border-radius: 50%; color: var(--m-green); background: var(--m-white); box-shadow: 0 4px 16px rgba(26,122,94,.1); }
+.closing-inner { min-height: 260px; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 24px; position: relative; z-index: 1; }
 .closing-inner .eyebrow { color: var(--m-green); }
 .closing-inner h2 { margin-top: 12px; font-size: 40px; }
 .closing-inner h2 em { color: var(--m-green); }

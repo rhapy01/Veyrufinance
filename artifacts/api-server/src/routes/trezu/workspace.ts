@@ -10,6 +10,7 @@ import {
   workspaceMembersTable,
   workspacesTable,
 } from "@workspace/db";
+import { userPreferencesTable } from "@workspace/db/schema";
 import {
   CreateWorkspaceBody,
   CreateWorkspaceResponse,
@@ -68,6 +69,38 @@ router.get("/workspaces", async (req, res): Promise<void> => {
   res.json({ workspaces });
 });
 
+router.get("/personal-profile/preferences", async (req, res): Promise<void> => {
+  const [preferences] = await db.select({ defaultReceiveAddresses: userPreferencesTable.defaultReceiveAddresses })
+    .from(userPreferencesTable).where(eq(userPreferencesTable.userId, req.trezuUserId!)).limit(1);
+  res.setHeader("Cache-Control", "private, no-store");
+  res.json({ defaultReceiveAddresses: preferences?.defaultReceiveAddresses ?? {} });
+});
+
+router.put("/personal-profile/preferences", async (req, res): Promise<void> => {
+  const body = req.body as { defaultReceiveAddresses?: unknown };
+  const addresses = body?.defaultReceiveAddresses;
+  if (!addresses || typeof addresses !== "object" || Array.isArray(addresses)) {
+    res.status(400).json({ error: "Choose wallet addresses for your personal profile." });
+    return;
+  }
+  const value = addresses as Record<string, unknown>;
+  const near = typeof value.near === "string" ? value.near.trim() : "";
+  const evm = typeof value.evm === "string" ? value.evm.trim() : "";
+  if (near.length > 128 || (near && !/^(?:[a-z0-9_-]+\.testnet|[a-f0-9]{64})$/i.test(near))) {
+    res.status(400).json({ error: "Choose a valid NEAR testnet account address." });
+    return;
+  }
+  if (evm.length > 42 || (evm && !/^0x[a-f0-9]{40}$/i.test(evm))) {
+    res.status(400).json({ error: "Choose a valid EVM wallet address." });
+    return;
+  }
+  const preferences = { ...(near ? { near } : {}), ...(evm ? { evm } : {}) };
+  await db.insert(userPreferencesTable).values({ userId: req.trezuUserId!, defaultReceiveAddresses: preferences })
+    .onConflictDoUpdate({ target: userPreferencesTable.userId, set: { defaultReceiveAddresses: preferences, updatedAt: new Date() } });
+  res.setHeader("Cache-Control", "private, no-store");
+  res.json({ defaultReceiveAddresses: preferences });
+});
+
 router.post("/workspaces", async (req, res): Promise<void> => {
   const parsed = CreateWorkspaceBody.safeParse(req.body);
   if (!parsed.success) {
@@ -76,17 +109,6 @@ router.post("/workspaces", async (req, res): Promise<void> => {
   }
 
   const userId = req.trezuUserId!;
-  const [existingMembership] = await db
-    .select({ id: workspaceMembersTable.id })
-    .from(workspaceMembersTable)
-    .where(eq(workspaceMembersTable.userId, userId))
-    .limit(1);
-
-  if (existingMembership) {
-    res.status(409).json({ error: "You already belong to a workspace" });
-    return;
-  }
-
   try {
     const workspaceId = randomUUID();
     await db.transaction(async (tx) => {
@@ -112,7 +134,7 @@ router.post("/workspaces", async (req, res): Promise<void> => {
 
     res
       .status(201)
-      .json(CreateWorkspaceResponse.parse(await getProfile(userId)));
+      .json(CreateWorkspaceResponse.parse(await getProfile(userId, workspaceId)));
   } catch (error) {
     if (
       error &&
@@ -120,7 +142,7 @@ router.post("/workspaces", async (req, res): Promise<void> => {
       "code" in error &&
       error.code === "23505"
     ) {
-      res.status(409).json({ error: "You already belong to a workspace" });
+      res.status(409).json({ error: "A workspace with these details already exists. Choose another name and try again." });
       return;
     }
     throw error;

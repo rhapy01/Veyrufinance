@@ -1,6 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import { SignJWT } from "jose";
+import { getAddress } from "viem";
 import { auditLogsTable, db, employeesTable, nearIntentQuotesTable, payrollCyclesTable, payrollItemsTable, workspacesTable } from "@workspace/db";
 import { UpdateEmployeeResponse } from "@workspace/api-zod";
 import {
@@ -16,6 +17,44 @@ import { createReceiptPdf, type ReceiptLine } from "../../lib/receipt-pdf";
 import { sendEmployeeInvitationEmail, emailDeliveryConfigured } from "../../lib/auth-email";
 
 const router: IRouter = Router();
+
+function normalizePayoutAddress(address: string, blockchain: string): string | null {
+  const chain = blockchain.toLowerCase();
+  if (chain === "near") return /^[a-z0-9._-]{2,64}$/.test(address) ? address : null;
+  if (["eth", "ethereum", "base", "op", "optimism", "arb", "arbitrum", "pol", "polygon", "bsc", "avax", "avalanche"].includes(chain)) {
+    try { return getAddress(address); } catch { return null; }
+  }
+  return address.length >= 20 ? address : null;
+}
+
+async function recordSubmittedPayrollDeposit(itemId: string, workspaceId: string, txHash: string, network: "near" | "evm") {
+  return db.transaction(async (tx) => {
+    const [item] = await tx.select().from(payrollItemsTable)
+      .where(and(eq(payrollItemsTable.id, itemId), eq(payrollItemsTable.workspaceId, workspaceId)))
+      .for("update").limit(1);
+    if (!item) return { error: "not_found" as const };
+    if (item.status === "paid") return { error: "already_paid" as const };
+    if (!item.paymentQuoteId) return { error: "quote_missing" as const };
+    const [quote] = await tx.select().from(nearIntentQuotesTable)
+      .where(and(eq(nearIntentQuotesTable.id, item.paymentQuoteId), eq(nearIntentQuotesTable.workspaceId, workspaceId)))
+      .for("update").limit(1);
+    if (!quote || (network === "near" ? quote.originAssetNetwork?.toLowerCase() !== "near" : quote.originAssetNetwork?.toLowerCase() === "near")) return { error: "network_mismatch" as const };
+    if (item.depositTxHash && item.depositTxHash.toLowerCase() !== txHash.toLowerCase()) return { error: "already_submitted" as const };
+    if (!item.depositTxHash) await tx.update(payrollItemsTable).set({ depositTxHash: txHash, updatedAt: new Date() }).where(eq(payrollItemsTable.id, item.id));
+    return { ok: true as const, alreadyRecorded: Boolean(item.depositTxHash) };
+  });
+}
+
+function reportDepositRecordError(error: "not_found" | "already_paid" | "quote_missing" | "network_mismatch" | "already_submitted", res: import("express").Response): void {
+  const messages = {
+    not_found: "Payroll payment not found.",
+    already_paid: "This payroll payment is already confirmed. No second transfer is needed.",
+    quote_missing: "Prepare the payroll payment route before submitting a transfer.",
+    network_mismatch: "This transaction does not match the payroll payment source network.",
+    already_submitted: "A transfer is already recorded for this payroll payment. Check its provider status instead of paying again.",
+  };
+  res.status(error === "not_found" ? 404 : 409).json({ error: messages[error] });
+}
 
 router.post("/employees/:employeeId/invitation", requireWorkspaceMember, requireWorkspaceRole("owner", "admin"), async (req, res): Promise<void> => {
   const employeeId = Array.isArray(req.params.employeeId) ? req.params.employeeId[0] || "" : req.params.employeeId;
@@ -50,7 +89,10 @@ router.get("/employee/me", requireLinkedEmployee, async (req, res): Promise<void
   res.json({ id: row.employee.id, name: row.employee.name, email: row.employee.email, country: row.employee.country, position: row.employee.position, compensationAmount: row.employee.compensationAmount, compensationCurrency: row.employee.compensationCurrency, payFrequency: row.employee.payFrequency, preferredStablecoin: row.employee.preferredStablecoin, preferredNetwork: row.employee.preferredNetwork, walletAddress: row.employee.walletAddress, payoutProfileCompleted: row.employee.payoutProfileCompleted, payrollEnabled: row.employee.payrollEnabled, workspaceName: row.workspaceName });
 });
 
-router.get("/employee/supported-assets", requireLinkedEmployee, async (_req, res): Promise<void> => {
+// An invited user needs this catalog before they can accept the invitation and
+// create their employee link. Authentication is already enforced by the parent
+// /api/trezu router; requiring an employee link here makes onboarding impossible.
+router.get("/employee/supported-assets", async (_req, res): Promise<void> => {
   try { res.setHeader("Cache-Control", "private, max-age=30"); res.json({ assets: await getSupportedAssets() }); }
   catch (error) { if (error instanceof NearIntentsError) { res.status(error.statusCode).json({ error: error.message }); return; } res.status(503).json({ error: "The payout asset catalog is temporarily unavailable." }); }
 });
@@ -65,12 +107,8 @@ router.patch("/employee/me/preferences", requireLinkedEmployee, async (req, res)
   catch { res.status(503).json({ error: "The current payout asset catalog is unavailable. Try again shortly." }); return; }
   const asset = assets.find((candidate) => candidate.assetId === assetId);
   if (!asset) { res.status(400).json({ error: "Choose an asset from the current supported payout catalog." }); return; }
-  const address = walletAddress.trim();
-  const chain = asset.blockchain.toLowerCase();
-  const validAddress = chain === "near" ? /^[a-z0-9._-]{2,64}$/.test(address)
-    : ["eth", "ethereum", "base", "op", "optimism", "arb", "arbitrum", "pol", "polygon", "bsc", "avax", "avalanche"].includes(chain) ? /^0x[0-9a-f]{40}$/i.test(address)
-      : address.length >= 20;
-  if (!validAddress) { res.status(400).json({ error: `The wallet address format does not match ${asset.blockchain}.` }); return; }
+  const address = normalizePayoutAddress(walletAddress.trim(), asset.blockchain);
+  if (!address) { res.status(400).json({ error: `The wallet address is invalid for ${asset.blockchain}. Check the address and its capitalization, then save it again.` }); return; }
   const [updated] = await db.update(employeesTable).set({ preferredStablecoin: asset.symbol, preferredNetwork: asset.blockchain, walletAddress: address, payoutProfileCompleted: true })
     .where(and(eq(employeesTable.id, req.trezuEmployeeId!), eq(employeesTable.active, true))).returning({ id: employeesTable.id, preferredStablecoin: employeesTable.preferredStablecoin, preferredNetwork: employeesTable.preferredNetwork, walletAddress: employeesTable.walletAddress });
   if (!updated) { res.status(404).json({ error: "Employee profile not found." }); return; }
@@ -206,6 +244,8 @@ router.post("/payroll/items/:itemId/quote", requireWorkspaceMember, requireWorks
     const destination = assets.find((asset) => asset.symbol.toUpperCase() === item.stablecoin.toUpperCase() && asset.blockchain.toLowerCase() === item.network.toLowerCase());
     if (!destination) return { error: "destination_unsupported" as const };
     if (!item.walletAddress?.trim()) return { error: "wallet_missing" as const };
+    const recipient = normalizePayoutAddress(item.walletAddress.trim(), destination.blockchain);
+    if (!recipient) return { error: "recipient_address_invalid" as const };
     let payout: { amount: string; usdPrice: string | null };
     try { payout = payoutFor(item, destination); }
     catch (error) { return { error: "payout_currency_unsupported" as const, detail: error instanceof Error ? error.message : "This payout currency cannot be converted." }; }
@@ -213,13 +253,13 @@ router.post("/payroll/items/:itemId/quote", requireWorkspaceMember, requireWorks
     if (!origin) return { error: "origin_unsupported" as const };
     if (origin.assetId === destination.assetId) return { error: "same_asset" as const };
     const attemptNumber = item.attemptNumber + 1;
-    const [updated] = await tx.update(payrollItemsTable).set({ attemptNumber, payoutAmount: payout.amount, payoutUsdPrice: payout.usdPrice, status: "processing", failureReason: null, paymentQuoteId: null, updatedAt: new Date() }).where(eq(payrollItemsTable.id, item.id)).returning();
+    const [updated] = await tx.update(payrollItemsTable).set({ walletAddress: recipient, attemptNumber, payoutAmount: payout.amount, payoutUsdPrice: payout.usdPrice, status: "processing", failureReason: null, paymentQuoteId: null, depositTxHash: null, updatedAt: new Date() }).where(eq(payrollItemsTable.id, item.id)).returning();
     await tx.update(payrollCyclesTable).set({ status: "processing" }).where(eq(payrollCyclesTable.id, cycle.id));
     return { item: updated!, cycle, destination, origin, payout, attemptNumber };
   });
   if ("error" in prepared) {
     const messages: Record<string, string> = {
-      not_found: "Payroll item not found.", cycle_not_found: "Payroll cycle not found.", cycle_not_approved: "Approve this payroll cycle before preparing payment quotes.", cycle_completed: "This payroll cycle is complete.", already_paid: "This employee payment is already confirmed.", payment_preparing: "A payment quote is already being prepared for this employee.", destination_unsupported: "The employee's selected stablecoin and network are not currently supported by NEAR Intents.", wallet_missing: "Add the employee's wallet address before preparing a payout.", origin_unsupported: "The selected source asset is no longer supported.", same_asset: "Choose a different source asset. Trezu uses NEAR Intents to convert the business's source asset into the employee's payout asset.", payout_currency_unsupported: "detail" in prepared ? prepared.detail : "This payout currency cannot be converted safely.",
+      not_found: "Payroll item not found.", cycle_not_found: "Payroll cycle not found.", cycle_not_approved: "Approve this payroll cycle before preparing payment quotes.", cycle_completed: "This payroll cycle is complete.", already_paid: "This employee payment is already confirmed.", payment_preparing: "A payment quote is already being prepared for this employee.", destination_unsupported: "The employee's selected stablecoin and network are not currently supported by NEAR Intents.", wallet_missing: "Add the employee's wallet address before preparing a payout.", recipient_address_invalid: "The employee payout address is invalid for the selected network. Correct the address and create a new pay run. No quote was requested and no funds were moved.", origin_unsupported: "The selected source asset is no longer supported.", same_asset: "Choose a different source asset. Trezu uses NEAR Intents to convert the business's source asset into the employee's payout asset.", payout_currency_unsupported: "detail" in prepared ? prepared.detail : "This payout currency cannot be converted safely.",
     };
     res.status(prepared.error === "not_found" || prepared.error === "cycle_not_found" ? 404 : 409).json({ error: messages[prepared.error] }); return;
   }
@@ -265,6 +305,8 @@ router.post("/payroll/items/:itemId/deposit-submitted", requireWorkspaceMember, 
   const [quote] = item?.paymentQuoteId ? await db.select().from(nearIntentQuotesTable).where(and(eq(nearIntentQuotesTable.id, item.paymentQuoteId), eq(nearIntentQuotesTable.workspaceId, req.trezuWorkspaceId!))).limit(1) : [];
   const depositAddress = quote?.quotePayload?.quote?.depositAddress;
   if (!quote || typeof depositAddress !== "string" || !/^0x[0-9a-f]{40}$/i.test(depositAddress)) { res.status(404).json({ error: "The payroll payment route was not found." }); return; }
+  const recorded = await recordSubmittedPayrollDeposit(req.params.itemId, req.trezuWorkspaceId!, txHash, "evm");
+  if ("error" in recorded) { reportDepositRecordError(recorded.error, res); return; }
   try { res.json(await submitDeposit(depositAddress, txHash)); } catch (error) { if (error instanceof NearIntentsError) { res.status(error.statusCode).json({ error: error.message }); return; } res.status(503).json({ error: "The provider notification failed. The on-chain wallet transaction remains submitted." }); }
 });
 
@@ -275,6 +317,8 @@ router.post("/payroll/items/:itemId/near-deposit-submitted", requireWorkspaceMem
   const [quote] = item?.paymentQuoteId ? await db.select().from(nearIntentQuotesTable).where(and(eq(nearIntentQuotesTable.id, item.paymentQuoteId), eq(nearIntentQuotesTable.workspaceId, req.trezuWorkspaceId!))).limit(1) : [];
   const depositAddress = quote?.quotePayload?.quote?.depositAddress;
   if (!quote || quote.originAssetNetwork?.toLowerCase() !== "near" || typeof depositAddress !== "string" || !/^[a-z0-9._-]{2,64}$/.test(depositAddress)) { res.status(409).json({ error: "This payroll item is not a NEAR deposit route." }); return; }
+  const recorded = await recordSubmittedPayrollDeposit(req.params.itemId, req.trezuWorkspaceId!, txHash, "near");
+  if ("error" in recorded) { reportDepositRecordError(recorded.error, res); return; }
   try { res.json(await submitDeposit(depositAddress, txHash)); } catch (error) { if (error instanceof NearIntentsError) { res.status(error.statusCode).json({ error: error.message }); return; } res.status(503).json({ error: "The provider notification failed. NEAR Intents monitors deposits automatically." }); }
 });
 
